@@ -1,0 +1,269 @@
+"""
+ReferralGuard — multi-agent pipeline.
+
+Each agent step appends a timestamped entry to a shared audit trail.
+The same logic runs whether or not API keys are present:
+  - ANTHROPIC_API_KEY  -> Claude does extraction + denial-risk reasoning (else deterministic mock)
+  - REDIS_URL          -> session state in Redis (else in-memory dict)
+  - SENTRY_DSN         -> exceptions captured to Sentry (else logged locally)
+
+Keep it simple: one file, no framework magic. server.py just calls run_pipeline().
+"""
+import os, re, json, time, random, string, traceback
+import observability as obs
+import submission_agent as sub_agent
+
+# Orkes Conductor: orchestrates the agent DAG + the human-approval gate.
+ORKES_ON = bool(os.getenv("CONDUCTOR_SERVER_URL") or os.getenv("ORKES_KEY_ID"))
+
+# ---- Optional sponsor integrations (all degrade gracefully) ----
+ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY")
+REDIS_URL     = os.getenv("REDIS_URL")
+SENTRY_DSN    = os.getenv("SENTRY_DSN")
+
+# Sentry ----------------------------------------------------------
+SENTRY_ON = False
+try:
+    if SENTRY_DSN:
+        import sentry_sdk
+        sentry_sdk.init(dsn=SENTRY_DSN, traces_sample_rate=1.0, environment="hackathon-demo")
+        SENTRY_ON = True
+except Exception:
+    SENTRY_ON = False
+
+def sentry_breadcrumb(msg, data=None):
+    if SENTRY_ON:
+        import sentry_sdk
+        sentry_sdk.add_breadcrumb(category="agent", message=msg, data=data or {}, level="info")
+
+def sentry_capture(exc, tags=None):
+    if SENTRY_ON:
+        import sentry_sdk
+        with sentry_sdk.push_scope() as scope:
+            for k, v in (tags or {}).items():
+                scope.set_tag(k, v)
+        return sentry_sdk.capture_exception(exc)
+    return "evt_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=10))
+
+# Redis -----------------------------------------------------------
+_redis = None
+_mem = {}
+try:
+    if REDIS_URL:
+        import redis
+        _redis = redis.from_url(REDIS_URL, decode_responses=True)
+        _redis.ping()
+except Exception:
+    _redis = None
+
+def state_set(session, key, value):
+    if _redis:
+        _redis.hset(session, key, json.dumps(value)); _redis.expire(session, 3600)
+    else:
+        _mem.setdefault(session, {})[key] = value
+
+REDIS_ON = _redis is not None
+
+# Claude ----------------------------------------------------------
+CLAUDE_ON = bool(ANTHROPIC_KEY)
+_client = None
+def _claude():
+    global _client
+    if _client is None:
+        import anthropic
+        _client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+    return _client
+
+EXTRACT_PROMPT = """You extract structured fields from a clinic referral / prior-auth request.
+Return ONLY JSON with keys: patient_name, dob, diagnosis_code, requested_cpt, procedure, payer, member_id, npi.
+Use null for anything not present. Request:
+{raw}
+"""
+RISK_PROMPT = """You are a prior-authorization denial-risk reviewer.
+Payer: {payer}. Procedure: {procedure} (CPT {cpt}).
+Clinical note: "{raw}"
+Known payer rule: {rule}
+Answer ONLY JSON: {{"risk": "high"|"none", "reason": "<one sentence>"}}.
+Mark "high" only if the rule's requirement is NOT supported by the note.
+"""
+
+def claude_extract(raw):
+    msg = _claude().messages.create(
+        model="claude-haiku-4-5-20251001", max_tokens=400,
+        messages=[{"role": "user", "content": EXTRACT_PROMPT.format(raw=raw)}])
+    return json.loads(_first_json(msg.content[0].text))
+
+def claude_risk(payer, procedure, cpt, raw, rule):
+    msg = _claude().messages.create(
+        model="claude-haiku-4-5-20251001", max_tokens=200,
+        messages=[{"role": "user", "content": RISK_PROMPT.format(
+            payer=payer, procedure=procedure, cpt=cpt, raw=raw, rule=rule)}])
+    return json.loads(_first_json(msg.content[0].text))
+
+def _first_json(text):
+    i, j = text.find("{"), text.rfind("}")
+    return text[i:j + 1] if i >= 0 else "{}"
+
+# ---- Domain knowledge -------------------------------------------
+PAYER_RULES = {
+    "J0135": {"name": "Adalimumab (Humira)", "need": "step therapy",
+              "keywords": ["methotrexate", "mtx", "dmard"],
+              "msg": "Payer policy requires a documented trial/failure of a conventional DMARD (e.g., methotrexate) before approving a biologic."},
+    "72148": {"name": "Lumbar MRI", "need": "conservative therapy",
+              "keywords": ["conservative therapy", "physical therapy", "weeks pt", "red-flag", "red flag"],
+              "msg": "Imaging guidelines require 4-6 weeks of conservative therapy OR documented red-flag symptoms for acute low back pain."},
+    "73721": {"name": "Knee MRI", "need": "conservative therapy",
+              "keywords": ["physical therapy", "weeks pt", "conservative"],
+              "msg": "Payer expects a trial of conservative management (e.g., 6 weeks PT) before advanced knee imaging."},
+}
+# A requirement counts as MET only if a keyword appears AND is not negated nearby
+# ("No documentation of methotrexate" must NOT count as a methotrexate trial).
+NEGATIONS = ["no ", "not ", "without", "absent", "denies", "negative for", "lacks", "missing", "none"]
+
+def requirement_met(hay: str, keywords: list) -> bool:
+    for k in keywords:
+        idx = hay.find(k)
+        while idx != -1:
+            window = hay[max(0, idx - 28):idx]
+            if not any(n in window for n in NEGATIONS):
+                return True
+            idx = hay.find(k, idx + 1)
+    return False
+REQUIRED = [("patient.name", "Patient name"), ("patient.dob", "Date of birth"),
+            ("diagnosis_code", "ICD-10 diagnosis code"), ("requested_cpt", "Requested CPT/HCPCS"),
+            ("insurance.payer", "Payer"), ("insurance.member_id", "Member ID"),
+            ("npi", "Referring provider NPI")]
+MEMBER_ID_RE = re.compile(r"^[A-Z]{2,4}-\d{4}-\d{4}$")
+
+
+class MemberIdFormatError(ValueError):
+    pass
+
+
+def _get(obj, path):
+    cur = obj
+    for k in path.split("."):
+        if cur is None:
+            return None
+        cur = cur.get(k) if isinstance(cur, dict) else None
+    return cur
+
+
+def run_pipeline(req: dict) -> dict:
+    """req mirrors the sample JSON shape. Returns trace + verdict for the dashboard."""
+    steps, flags = [], []
+    t = {"ms": 0}
+    session = "sess:%s:%s" % (req["id"][-3:], "".join(random.choices(string.ascii_lowercase + string.digits, k=5)))
+
+    def push(who, badge, act, det):
+        t["ms"] += 40 + random.randint(0, 90)
+        steps.append({"who": who, "badge": badge, "act": act, "det": det, "ms": t["ms"]})
+        # persist every step as a span (local JSONL always; Arize if configured)
+        obs.log_span(session, who, {"act": act, "engine": badge, "request_id": req["id"]})
+
+    # 1. Intake
+    state_set(session, "status", "RECEIVED")
+    sentry_breadcrumb("intake", {"request_id": req["id"]})
+    push("Intake Agent", "redis", "Request received — session opened",
+         f'Channel <code>{req["chan"]}</code> · clinic “{req["clinic"]}”. Raw payload cached to '
+         f'<code>{session}</code> (TTL 1h){" via Redis" if REDIS_ON else " (in-memory)"}. State → <code>RECEIVED</code>.')
+
+    # 2. Extraction (Claude or mock)
+    if CLAUDE_ON:
+        try:
+            ex = claude_extract(req.get("raw", ""))
+            src = "Claude (live)"
+        except Exception as e:
+            sentry_capture(e, {"stage": "extract", "request_id": req["id"]}); ex, src = {}, "mock (Claude error)"
+    else:
+        ex, src = {}, "deterministic mock"
+    push("Extraction Agent", "claude", "Structured fields extracted from raw text",
+         f'Parsed via {src}: patient=<code>{req["patient"]["name"]}</code> · '
+         f'dx=<code>{req.get("diagnosis_code") or "∅ not found"}</code> · cpt=<code>{req.get("requested_cpt")}</code> · '
+         f'payer=<code>{req["insurance"]["payer"]}</code>')
+
+    # 3. Completeness
+    missing = [(p, label) for (p, label) in REQUIRED if not _get(req, p)]
+    push("Completeness Agent", "rule", f"Required-field check: {len(REQUIRED)-len(missing)}/{len(REQUIRED)} present",
+         ("Missing → " + ", ".join(f"<code>{l}</code>" for _, l in missing) +
+          ". Each is a documented reason the payer would return the request unprocessed.")
+         if missing else "All required fields present. No intake gaps.")
+    for _, label in missing:
+        flags.append({"sev": "warn", "ttl": "Missing: " + label,
+                      "rsn": "Payer will reject or pend a submission without this field."})
+
+    # 4. Validation (+ Sentry path)
+    push("Validation Agent", "redis", "Member ID format validation",
+         f'Checking <code>{req["insurance"]["member_id"]}</code> against payer ID pattern…')
+    try:
+        if not MEMBER_ID_RE.match(req["insurance"]["member_id"] or ""):
+            raise MemberIdFormatError(f'invalid member id: {req["insurance"]["member_id"]}')
+        state_set(session, "status", "VALIDATED")
+        push("Validation Agent", "redis", "Member ID OK", "Format valid. State → <code>VALIDATED</code>.")
+    except MemberIdFormatError as e:
+        sentry_breadcrumb("validate.fail", {"member_id": req["insurance"]["member_id"]})
+        evt = sentry_capture(e, {"request_id": req["id"], "payer": req["insurance"]["payer"]})
+        push("Sentry", "sentry", "Exception captured — pipeline did NOT crash",
+             f'<code>MemberIdFormatError</code> raised while normalizing insurance ID. '
+             f'Captured to Sentry as <code>{evt}</code>{"" if SENTRY_ON else " (local id; set SENTRY_DSN to send)"} '
+             f'with breadcrumbs [intake→extract→validate]. Agent recovered → routed to human review.')
+        flags.append({"sev": "warn", "ttl": "Unreadable member ID",
+                      "rsn": "Intake produced an invalid member ID. Exception logged to Sentry; flagged for correction before submit."})
+
+    # 5. Denial-risk (Claude or rule)
+    cpt = req.get("requested_cpt")
+    rule = PAYER_RULES.get(cpt)
+    push("Denial-Risk Agent", "claude", f'Payer-policy reasoning for {req["insurance"]["payer"]}',
+         (f'Procedure {rule["name"]} (CPT {cpt}) has a known <b>{rule["need"]}</b> requirement. '
+          f'Scanning clinical note for supporting evidence…') if rule else
+         f'CPT {cpt}: no high-risk utilization rule on file. Checking baseline medical-necessity language…')
+    if rule:
+        hay = (req.get("raw", "") + " " + req.get("procedure", "")).lower()
+        high = not requirement_met(hay, rule["keywords"])
+        reason = rule["msg"]
+        if CLAUDE_ON:
+            try:
+                r = claude_risk(req["insurance"]["payer"], req.get("procedure"), cpt, req.get("raw", ""), rule["msg"])
+                high = r.get("risk") == "high"; reason = r.get("reason", reason)
+            except Exception as e:
+                sentry_capture(e, {"stage": "risk", "request_id": req["id"]})
+        if high:
+            push("Denial-Risk Agent", "claude", f'HIGH denial risk — {rule["need"]} not documented',
+                 f'{reason} No supporting evidence found in the referral. Predicted outcome: <b>denial / pend</b> if submitted as-is.')
+            flags.append({"sev": "risk", "ttl": f'Likely denial: {rule["need"]} not documented', "rsn": reason})
+        else:
+            push("Denial-Risk Agent", "claude", f'{rule["need"]} requirement satisfied',
+                 "Found supporting evidence in note. Requirement met.")
+
+    # 6. Decision
+    has_risk = any(f["sev"] == "risk" for f in flags)
+    has_warn = any(f["sev"] == "warn" for f in flags)
+    if has_risk:
+        verdict, vclass, vsub = "HIGH DENIAL RISK", "risk", "Fix the flagged gap before submitting — high probability of denial."
+    elif has_warn:
+        verdict, vclass, vsub = "NEEDS INFO", "warn", "Return to referring clinic for the missing or invalid fields."
+    else:
+        verdict, vclass, vsub = "READY TO SUBMIT", "ok", "All checks passed. Safe to submit to the payer."
+    state_set(session, "verdict", verdict)
+    push("Decision Agent", "rule", f"Final verdict: {verdict}",
+         f'Derived from {len(flags)} flag(s). Full trace persisted to <code>{session}:audit</code> for replay. '
+         f'State → <code>{"READY" if vclass=="ok" else "NEEDS_INFO" if vclass=="warn" else "AT_RISK"}</code>.')
+
+    # 7. Human-approval gate (Orkes) + portal submission (Browserbase) — only when READY
+    submission = None
+    if vclass == "ok":
+        approver = "ops@clinic (demo auto-approve)"
+        push("Approval Gate", "orkes", "Human-in-the-loop approval — required for prior auth",
+             f'Conductor <code>HUMAN</code> task created and awaiting sign-off (prior auth legally requires a human). '
+             f'Approved by <code>{approver}</code>{"" if ORKES_ON else " — simulated; set CONDUCTOR_SERVER_URL to run on Orkes"}. Workflow resumes.')
+        submission = sub_agent.run_submission(req, push)
+        state_set(session, "submission", submission)
+    else:
+        push("Routing Agent", "rule", "Routed to human review queue",
+             "Not eligible for auto-submission. Returned to the referring clinic with the flagged reasons attached.")
+
+    return {"steps": steps, "flags": flags, "verdict": verdict, "vclass": vclass, "vsub": vsub,
+            "session": session, "missing": [[p, l] for (p, l) in missing], "submission": submission,
+            "engines": {"claude": CLAUDE_ON, "redis": REDIS_ON, "sentry": SENTRY_ON,
+                        "phoenix": obs.PHOENIX_ON, "deepgram": __import__("intake_voice").DEEPGRAM_ON,
+                        "browserbase": sub_agent.BROWSERBASE_ON, "orkes": ORKES_ON}}

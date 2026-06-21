@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ReferralGuard — one-pager</title>
+<style>
+  :root{--ink:#1d1d1f;--muted:#6e6e73;--line:#e3e3e6;--accent:#0071e3;--green:#00a15a;--amber:#b25e00;--red:#c4183c;
+    --sans:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,Helvetica,Arial,sans-serif;--mono:'SF Mono',ui-monospace,Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:#f5f5f7;color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  .page{max-width:900px;margin:24px auto;background:#fff;border-radius:20px;border:1px solid var(--line);overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+  .hero{padding:34px 40px 26px;border-bottom:1px solid var(--line)}
+  .brandrow{display:flex;align-items:center;gap:13px}
+  .logo{width:40px;height:40px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px}
+  h1{font-size:30px;margin:0;letter-spacing:-.6px}
+  .tag{font-size:15px;color:var(--muted);margin-top:8px;max-width:640px;line-height:1.5}
+  .pitch{font-size:14px;color:var(--ink);margin-top:14px;max-width:680px;line-height:1.55;background:#f5f9ff;border:1px solid #d6e6fb;border-radius:12px;padding:13px 15px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  .sec{padding:24px 40px}
+  .sec.b{border-left:1px solid var(--line)}
+  h2{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin:0 0 14px;font-weight:600}
+  .stat{display:flex;gap:14px;margin-bottom:14px}
+  .stat .n{font-size:26px;font-weight:700;letter-spacing:-.5px;color:var(--accent);min-width:74px}
+  .stat .d{font-size:13px;color:var(--muted);line-height:1.4;padding-top:3px}
+  .step{display:flex;gap:11px;margin-bottom:13px}
+  .step .i{width:22px;height:22px;border-radius:50%;background:var(--ink);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto;margin-top:1px}
+  .step .t{font-size:13.5px;line-height:1.5}
+  .step .t b{font-weight:650}
+  /* mock dashboard "screenshot" */
+  .shot{margin:0 40px 8px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+  .shotbar{display:flex;align-items:center;gap:7px;padding:9px 13px;border-bottom:1px solid var(--line);background:#fafafa}
+  .shotbar .d{width:9px;height:9px;border-radius:50%}
+  .shotbar .ttl{font-size:11px;color:var(--muted);margin-left:8px}
+  .shotgrid{display:grid;grid-template-columns:1.5fr 1fr}
+  .trace{padding:13px 15px;border-right:1px solid var(--line)}
+  .trow{display:grid;grid-template-columns:54px 1fr;gap:9px;padding:6px 0;border-bottom:1px solid #f0f0f2}
+  .trow:last-child{border-bottom:none}
+  .trow .ts{font-family:var(--mono);font-size:9.5px;color:var(--muted);padding-top:2px}
+  .trow .who{font-size:11px;font-weight:700}
+  .trow .who .bdg{font-size:8px;padding:1px 5px;border-radius:4px;margin-left:5px;font-weight:700}
+  .b-claude{background:rgba(194,65,12,.1);color:#c2410c}.b-sentry{background:rgba(109,40,217,.1);color:#6d28d9}
+  .b-redis{background:rgba(185,28,28,.1);color:#b91c1c}.b-rule{background:rgba(0,113,227,.1);color:#0071e3}
+  .trow .act{font-size:11px;color:var(--muted);margin-top:1px;line-height:1.35}
+  .right{padding:13px 15px}
+  .kv{display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px}
+  .kv .k{color:var(--muted)}.kv .v{font-family:var(--mono);font-size:10px}.kv .v.miss{color:var(--red)}
+  .verdict{margin-top:10px;border-radius:10px;padding:10px;text-align:center;background:#fbf2f4;border:1px solid rgba(196,24,60,.3)}
+  .verdict .l{font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  .verdict .v{font-size:15px;font-weight:700;color:var(--red);margin-top:3px}
+  .techrow{padding:18px 40px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .chip{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink)}
+  .chip b{color:var(--accent)}
+  .company{padding:18px 40px 26px;background:#0b0b0c;color:#f5f5f7}
+  .company .l{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:#8e8e93;margin-bottom:7px}
+  .company p{margin:0;font-size:15px;line-height:1.55;max-width:760px}
+  .company b{color:#5b9dff}
+  @media print{body{background:#fff}.page{box-shadow:none;border:none;margin:0;border-radius:0}@page{margin:10mm}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hero">
+    <div class="brandrow"><div class="logo">R</div><div><h1>ReferralGuard</h1></div></div>
+    <div class="tag">A multi-agent pre-flight check for specialty referrals & prior authorizations — catching denials <i>before</i> submission, with a watchable, timestamped audit trail.</div>
+    <div class="pitch"><b>The pitch:</b> ReferralGuard reads an incoming referral or prior-auth request, extracts the key fields, flags everything missing or likely to be denied — each with a stated reason — and shows a replayable audit trail of exactly what each agent checked and why. It turns reactive, after-the-fact denials into a fix made before the request is ever sent.</div>
+  </div>
+
+  <div class="grid">
+    <div class="sec">
+      <h2>The problem</h2>
+      <div class="stat"><div class="n">~40</div><div class="d">prior auths per physician per week (2025 AMA PA Survey)</div></div>
+      <div class="stat"><div class="n">~13h</div><div class="d">spent on prior auth per physician per week</div></div>
+      <div class="stat"><div class="n">~50%</div><div class="d">of specialty referrals never get completed</div></div>
+      <div class="stat"><div class="n">94%</div><div class="d">of physicians say prior auth drives burnout</div></div>
+    </div>
+    <div class="sec b">
+      <h2>The solution — 3 steps, live</h2>
+      <div class="step"><div class="i">1</div><div class="t"><b>Extract</b> patient, ICD-10 diagnosis, CPT procedure, and insurance from messy fax / EHR / phone-voice intake.</div></div>
+      <div class="step"><div class="i">2</div><div class="t"><b>Flag</b> what's missing or likely to be denied — undocumented step therapy, unreadable member ID — each with a written reason.</div></div>
+      <div class="step"><div class="i">3</div><div class="t"><b>Show the audit trail</b> — a timestamped, replayable trace of every agent decision. Watchable in under 30 seconds.</div></div>
+    </div>
+  </div>
+
+  <div style="padding:6px 40px 2px"><h2>The demo — live decision trace</h2></div>
+  <div class="shot">
+    <div class="shotbar"><span class="d" style="background:#ff5f57"></span><span class="d" style="background:#febc2e"></span><span class="d" style="background:#28c840"></span><span class="ttl">ReferralGuard — Humira biologic prior auth · UnitedHealthcare</span></div>
+    <div class="shotgrid">
+      <div class="trace">
+        <div class="trow"><div class="ts">08:36:12.067</div><div><div class="who">INTAKE<span class="bdg b-redis">REDIS</span></div><div class="act">Session opened, payload cached (TTL 1h)</div></div></div>
+        <div class="trow"><div class="ts">08:36:12.166</div><div><div class="who">EXTRACTION<span class="bdg b-claude">CLAUDE</span></div><div class="act">Fields parsed: dx=M06.9 · cpt=J0135 · payer=UHC</div></div></div>
+        <div class="trow"><div class="ts">08:36:12.245</div><div><div class="who">COMPLETENESS<span class="bdg b-rule">RULE</span></div><div class="act">7/7 required fields present</div></div></div>
+        <div class="trow"><div class="ts">08:36:12.331</div><div><div class="who">VALIDATION<span class="bdg b-redis">REDIS</span></div><div class="act">Member ID format valid → VALIDATED</div></div></div>
+        <div class="trow"><div class="ts">08:36:12.418</div><div><div class="who">DENIAL-RISK<span class="bdg b-claude">CLAUDE</span></div><div class="act"><b>HIGH risk</b> — step therapy (methotrexate) not documented; predicted denial</div></div></div>
+        <div class="trow"><div class="ts">08:36:12.502</div><div><div class="who">DECISION<span class="bdg b-rule">RULE</span></div><div class="act">Verdict from 1 flag; full trace persisted for replay</div></div></div>
+      </div>
+      <div class="right">
+        <div class="kv"><span class="k">Patient</span><span class="v">Dana Whitfield</span></div>
+        <div class="kv"><span class="k">ICD-10</span><span class="v">M06.9</span></div>
+        <div class="kv"><span class="k">CPT</span><span class="v">J0135</span></div>
+        <div class="kv"><span class="k">Payer</span><span class="v">UnitedHealthcare</span></div>
+        <div class="kv"><span class="k">Step therapy</span><span class="v miss">not documented</span></div>
+        <div class="verdict"><div class="l">Verdict</div><div class="v">HIGH DENIAL RISK</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="techrow">
+    <span class="chip"><b>Browserbase</b> payer-portal submission</span>
+    <span class="chip"><b>Orkes</b> orchestration + human gate</span>
+    <span class="chip"><b>Claude</b> reasoning core</span>
+    <span class="chip"><b>Phoenix</b> agent tracing</span>
+    <span class="chip"><b>Deepgram</b> voice intake</span>
+    <span class="chip"><b>Sentry</b> exception capture</span>
+    <span class="chip"><b>Redis</b> agent state</span>
+  </div>
+
+  <div class="company">
+    <div class="l">Why this could be a company</div>
+    <p>Every denied or returned prior auth is lost clinic revenue and a delayed patient. ReferralGuard sits at the point of submission and converts after-the-fact denials into <b>pre-submission fixes</b>, with an audit trail payers and compliance teams can trust — a per-seat SaaS wedge into a workflow every specialist hits <b>~40 times a week</b>.</p>
+  </div>
+</div>
+</body>
+</html>

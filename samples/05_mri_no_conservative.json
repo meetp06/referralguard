@@ -1,0 +1,28 @@
+{
+  "request_id": "REF-2026-0612-005",
+  "received_at": "2026-06-20T08:41:09Z",
+  "channel": "phone_intake",
+  "source_clinic": "Lakeside Spine & Pain",
+  "referral_type": "prior_authorization",
+  "raw_text": "PA — Lumbar MRI CPT 72148 for low back pain. Pt Patricia Lowe DOB 09/30/1962. MRN LS-1190. Dx M54.50 Low back pain. Insurance Humana Medicare Advantage, Member ID HUM-9921-3304, Group MA-22. Onset 10 days ago, no red-flag neuro symptoms, no documented conservative therapy yet. Provider NPI 1902847711.",
+  "patient": {
+    "name": "Patricia Lowe",
+    "dob": "1962-09-30",
+    "mrn": "LS-1190"
+  },
+  "diagnosis_code": "M54.50",
+  "requested_procedure": "MRI lumbar spine without contrast",
+  "requested_cpt": "72148",
+  "insurance": {
+    "payer": "Humana Medicare Advantage",
+    "member_id": "HUM-9921-3304",
+    "group": "MA-22"
+  },
+  "referring_provider_npi": "1902847711",
+  "attachments": [],
+  "_demo_meta": {
+    "completeness": "complete_but_high_denial_risk",
+    "expected_verdict": "HIGH_DENIAL_RISK",
+    "risk_reason": "Imaging guidelines require 4-6 weeks conservative therapy or red-flag symptoms for acute low back pain; neither documented."
+  }
+}

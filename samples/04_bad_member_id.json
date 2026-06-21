@@ -1,0 +1,28 @@
+{
+  "request_id": "REF-2026-0612-004",
+  "received_at": "2026-06-20T08:38:45Z",
+  "channel": "fax_ocr",
+  "source_clinic": "Riverside Orthopedics",
+  "referral_type": "prior_authorization",
+  "raw_text": "PA request — MRI right knee CPT 73721. Pt Kevin Tran DOB 03/14/1977. Dx M23.205 Derangement of meniscus. Insurance Cigna member ID '##-OCR-ERR-##' (fax illegible). Provider NPI 1730028841. Six weeks PT documented.",
+  "patient": {
+    "name": "Kevin Tran",
+    "dob": "1977-03-14",
+    "mrn": "RO-5567"
+  },
+  "diagnosis_code": "M23.205",
+  "requested_procedure": "MRI right knee without contrast",
+  "requested_cpt": "73721",
+  "insurance": {
+    "payer": "Cigna",
+    "member_id": "##-OCR-ERR-##",
+    "group": "CIG-7781"
+  },
+  "referring_provider_npi": "1730028841",
+  "attachments": ["pt_notes_6wk.pdf"],
+  "_demo_meta": {
+    "completeness": "corrupt_field_triggers_sentry",
+    "expected_verdict": "NEEDS_INFO",
+    "note": "Malformed member ID raises a validation exception captured by Sentry, then routed to NEEDS_INFO instead of crashing."
+  }
+}

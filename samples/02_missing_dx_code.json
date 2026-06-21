@@ -1,0 +1,27 @@
+{
+  "request_id": "REF-2026-0612-002",
+  "received_at": "2026-06-20T08:33:50Z",
+  "channel": "phone_intake",
+  "source_clinic": "Northgate Urgent Care",
+  "referral_type": "specialist_referral",
+  "raw_text": "Phone referral to GI. Patient James O'Neill, DOB 11/02/1981. Wants colonoscopy. Insurance is Aetna, member ID provided. Symptoms: intermittent rectal bleeding, family hx colon cancer. No ICD-10 stated by referring office. CPT 45378 requested.",
+  "patient": {
+    "name": "James O'Neill",
+    "dob": "1981-11-02",
+    "mrn": null
+  },
+  "diagnosis_code": null,
+  "requested_procedure": "Diagnostic colonoscopy",
+  "requested_cpt": "45378",
+  "insurance": {
+    "payer": "Aetna",
+    "member_id": "AET-7781-2200",
+    "group": null
+  },
+  "referring_provider_npi": null,
+  "attachments": [],
+  "_demo_meta": {
+    "completeness": "missing_fields",
+    "expected_verdict": "NEEDS_INFO"
+  }
+}

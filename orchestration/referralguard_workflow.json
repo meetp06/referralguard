@@ -1,0 +1,96 @@
+{
+  "_comment": "Orkes Conductor workflow definition for the ReferralGuard agent pipeline. Each agent step is a task; this maps our pipeline 1:1 onto Conductor so it can be orchestrated, retried, and observed at scale. Import via the Orkes Conductor UI or POST to /api/metadata/workflow. The reference implementation in backend/agent_pipeline.py runs the same DAG in-process for the demo.",
+  "name": "referralguard_prior_auth",
+  "description": "Multi-agent referral / prior-auth pre-flight check",
+  "version": 1,
+  "schemaVersion": 2,
+  "inputParameters": ["request"],
+  "tasks": [
+    {
+      "name": "intake_agent",
+      "taskReferenceName": "intake",
+      "type": "SIMPLE",
+      "inputParameters": { "request": "${workflow.input.request}" }
+    },
+    {
+      "name": "extraction_agent",
+      "taskReferenceName": "extract",
+      "type": "SIMPLE",
+      "description": "Claude extracts typed fields from raw/transcribed referral text",
+      "inputParameters": { "raw": "${intake.output.raw}" }
+    },
+    {
+      "name": "completeness_agent",
+      "taskReferenceName": "completeness",
+      "type": "SIMPLE",
+      "inputParameters": { "fields": "${extract.output.fields}" }
+    },
+    {
+      "name": "validation_agent",
+      "taskReferenceName": "validate",
+      "type": "SIMPLE",
+      "description": "Member-ID validation; raises captured-by-Sentry exception on malformed input",
+      "inputParameters": { "member_id": "${extract.output.fields.member_id}" }
+    },
+    {
+      "name": "denial_risk_agent",
+      "taskReferenceName": "risk",
+      "type": "SIMPLE",
+      "description": "Claude reasons over payer policy to predict denial risk",
+      "inputParameters": { "fields": "${extract.output.fields}", "raw": "${intake.output.raw}" }
+    },
+    {
+      "name": "decision_agent",
+      "taskReferenceName": "decide",
+      "type": "SIMPLE",
+      "inputParameters": {
+        "completeness": "${completeness.output}",
+        "validation": "${validate.output}",
+        "risk": "${risk.output}"
+      }
+    },
+    {
+      "name": "ready_switch",
+      "taskReferenceName": "ready_switch",
+      "type": "SWITCH",
+      "evaluatorType": "value-param",
+      "expression": "verdict",
+      "inputParameters": { "verdict": "${decide.output.verdict}" },
+      "decisionCases": {
+        "READY TO SUBMIT": [
+          {
+            "name": "human_approval_gate",
+            "taskReferenceName": "approval",
+            "type": "HUMAN",
+            "description": "Prior auth legally requires a human sign-off before submission. Workflow pauses here until an approver completes the task in the Orkes inbox.",
+            "inputParameters": { "verdict": "${decide.output.verdict}", "flags": "${decide.output.flags}" }
+          },
+          {
+            "name": "submission_agent",
+            "taskReferenceName": "submit",
+            "type": "SIMPLE",
+            "description": "Browserbase hosted browser submits the PA to the payer portal and returns a confirmation",
+            "inputParameters": { "request": "${workflow.input.request}", "approved_by": "${approval.output.user}" }
+          }
+        ]
+      },
+      "defaultCase": [
+        {
+          "name": "route_human_review",
+          "taskReferenceName": "review",
+          "type": "SIMPLE",
+          "description": "NEEDS INFO / HIGH DENIAL RISK -> return to referring clinic with reasons",
+          "inputParameters": { "flags": "${decide.output.flags}" }
+        }
+      ]
+    }
+  ],
+  "outputParameters": {
+    "verdict": "${decide.output.verdict}",
+    "flags": "${decide.output.flags}",
+    "audit_trail": "${decide.output.steps}",
+    "confirmation": "${submit.output.confirmation}"
+  },
+  "failureWorkflow": "referralguard_human_review",
+  "ownerEmail": "team@referralguard.dev"
+}

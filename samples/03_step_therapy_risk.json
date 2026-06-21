@@ -1,0 +1,28 @@
+{
+  "request_id": "REF-2026-0612-003",
+  "received_at": "2026-06-20T08:36:12Z",
+  "channel": "ehr_direct",
+  "source_clinic": "Summit Rheumatology",
+  "referral_type": "prior_authorization",
+  "raw_text": "Prior auth — Humira (adalimumab) for rheumatoid arthritis. Pt: Dana Whitfield DOB 07/22/1990. MRN SR-2041. Dx M06.9 Rheumatoid arthritis. Insurance UnitedHealthcare, Member ID UHC-3398-1180, Group RX-552. No documentation of methotrexate trial. Provider NPI 1487720013.",
+  "patient": {
+    "name": "Dana Whitfield",
+    "dob": "1990-07-22",
+    "mrn": "SR-2041"
+  },
+  "diagnosis_code": "M06.9",
+  "requested_procedure": "Adalimumab (Humira) biologic therapy",
+  "requested_cpt": "J0135",
+  "insurance": {
+    "payer": "UnitedHealthcare",
+    "member_id": "UHC-3398-1180",
+    "group": "RX-552"
+  },
+  "referring_provider_npi": "1487720013",
+  "attachments": ["clinic_note_06-15.pdf"],
+  "_demo_meta": {
+    "completeness": "complete_but_high_denial_risk",
+    "expected_verdict": "HIGH_DENIAL_RISK",
+    "risk_reason": "Payer requires documented step therapy (methotrexate trial) before biologics; not present."
+  }
+}

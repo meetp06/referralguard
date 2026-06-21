@@ -1,0 +1,27 @@
+{
+  "request_id": "REF-2026-0612-001",
+  "received_at": "2026-06-20T08:31:04Z",
+  "channel": "fax_ocr",
+  "source_clinic": "Bayview Family Medicine",
+  "referral_type": "specialist_referral",
+  "raw_text": "REFERRAL — Cardiology. Pt: Maria Gonzalez DOB 04/18/1969. MRN BV-88231. Dx: I20.0 Unstable angina. Requesting: Outpatient cardiology consult + stress echo (CPT 93350). Insurance: BlueShield PPO, Member ID BSC-4471-9920, Group 88123. PCP: Dr. Alan Reyes NPI 1295847362. Clinical note: Exertional chest pain x3 weeks, troponin negative, EKG nonspecific ST changes. Conservative tx (nitrates, ASA) started 5/30. Prior EKG and lipid panel attached.",
+  "patient": {
+    "name": "Maria Gonzalez",
+    "dob": "1969-04-18",
+    "mrn": "BV-88231"
+  },
+  "diagnosis_code": "I20.0",
+  "requested_procedure": "Outpatient cardiology consult + stress echocardiogram",
+  "requested_cpt": "93350",
+  "insurance": {
+    "payer": "BlueShield PPO",
+    "member_id": "BSC-4471-9920",
+    "group": "88123"
+  },
+  "referring_provider_npi": "1295847362",
+  "attachments": ["EKG_05-29.pdf", "lipid_panel.pdf"],
+  "_demo_meta": {
+    "completeness": "complete",
+    "expected_verdict": "READY_TO_SUBMIT"
+  }
+}
