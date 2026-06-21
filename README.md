@@ -140,19 +140,22 @@ Files: `backend/fetch_agent.py` (Chat Protocol + a2a), `backend/clinic_agent.py`
 Every integration makes a **real SDK/API call**, not just a feature flag. Add the key in `.env` to flip
 it live; `GET /health` shows what's on (mock mode otherwise, so judges can run instantly).
 
-**Prize tracks:** Best Use of Redis · Best Use of Sentry API · The Token Company (Ingenuity)
+**General track:** Ddoski's **World** (real-world healthcare impact).
+**Sponsor prizes targeted:** Best Use of the Agentverse (Fetch.ai) · Best Use of Claude · Redis (Beyond Caching) · Best Use of Sentry API · Best Use of Deepgram · Best Use of Browserbase · Best Use of Arize · Best Use of The Token Company.
 
-| Sponsor | What it does here | Proof in code |
+The "What it does" column is written to each prize's stated criteria.
+
+| Sponsor | What it does here (mapped to the criteria) | Proof in code |
 |---|---|---|
-| **Anthropic — Claude** | extraction, denial-risk reasoning, grounded case chat, compression guard | `agent_pipeline.py` — `anthropic.Anthropic().messages.create()` (L100), `.count_tokens()` (L351) |
-| **Redis** | inter-agent session state + audit persistence (TTL 1h) | `agent_pipeline.py:63` — `redis.from_url().ping()/.hset()/.expire()` |
-| **Sentry** | exception capture on the member-ID error path, w/ breadcrumbs + tags | `agent_pipeline.py:37-54` — `sentry_sdk.init / add_breadcrumb / capture_exception` |
-| **Deepgram** | voice intake — transcribe phone referrals (`nova-3`) | `intake_voice.py:41` — `dg.listen.rest.v("1").transcribe_file()` |
-| **Browserbase** | hosted browser submits the PA to the payer portal | `submission_agent.py:31,48` — `api.browserbase.com/v1/sessions` + `playwright.connect_over_cdp()` |
-| **Arize Phoenix** | OTEL tracing of every agent decision span | `observability.py:25-32` — `OTLPSpanExporter → /v1/traces` |
-| **Orkes Conductor** | durable workflow + the HUMAN approval gate | `orchestration/worker.py:28-50` — `conductor.client @worker_task / TaskHandler` |
-| **Fetch.ai / ASI:One** | ASI:One-discoverable agent: NL referral → verdict | `fetch_agent.py` (uagents), `asi_client.py` (ASI:One LLM) |
-| **The Token Company** | context compression before every LLM call + real before/after token meter | `agent_pipeline.py:375` — `compress_context()`, `_count_tokens()` (L346) |
+| **Fetch.ai / Agentverse** | An **ASI:One-discoverable agent that takes action**, not a chatbot or thin wrapper: understands a plain-English referral, runs the checks, and (when clean) **submits it** — plus an agent-to-agent handoff. | `fetch_agent.py` (uagents Chat Protocol + a2a), `asi_client.py` (ASI:One LLM) |
+| **Anthropic — Claude** | Core reasoning on a **health** problem, built with Claude Code: field extraction, denial-risk analysis, grounded case chat, and the compression guard. | `agent_pipeline.py` — `anthropic.Anthropic().messages.create()` (L100), `.count_tokens()` (L351) |
+| **Redis — beyond caching** | **Agent memory / shared state** across the multi-agent pipeline (each step reads + writes session state) and a replayable audit trail — not a cache. | `agent_pipeline.py:63` — `redis.from_url().ping()/.hset()/.expire()` |
+| **Sentry** | **Reliability from day one**: captures the real failure path (unreadable member ID) with breadcrumbs + tags so a bad input is logged, not a crash. | `agent_pipeline.py:37-54` — `sentry_sdk.init / add_breadcrumb / capture_exception` |
+| **Deepgram** | **Voice is essential, not tacked on** — phone referrals come in as audio and are transcribed live (`nova-3`) to drive the whole pipeline. | `intake_voice.py:41` — `dg.listen.rest.v("1").transcribe_file()` |
+| **Browserbase** | **An agent that uses the web**: a real hosted browser logs into the payer portal and submits the prior auth (Playwright over CDP). | `submission_agent.py:31,48` — `api.browserbase.com/v1/sessions` + `playwright.connect_over_cdp()` |
+| **Arize** | **Tracing that improved the app**: OTEL spans of every agent decision; we used them to verify and replay the pipeline (and caught the export issue). | `observability.py:25-32` — `OTLPSpanExporter → /v1/traces` |
+| **The Token Company** | **Research/ingenuity**: real context compression before every LLM call with a verifier guard + a live before/after token meter (model's own tokenizer). | `agent_pipeline.py:375` — `compress_context()`, `_count_tokens()` (L346) |
+| **Orkes Conductor** | Durable workflow + the HUMAN approval gate prior auth requires. *(Note: the Orkes prize targets Agentspan, which we don't use — this is a Conductor integration.)* | `orchestration/worker.py:28-50` — `conductor.client @worker_task / TaskHandler` |
 
 **Mocked (clearly labeled):** payer policy rules (3 representative), 5 synthetic samples (no PHI),
 EHR/fax connectors (channel field). The pipeline itself is the real part.
