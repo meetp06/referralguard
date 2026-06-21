@@ -365,8 +365,17 @@
   footer code{font-family:var(--mono)}
   .builtwith{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px}
   .builtwith .bwlbl{color:var(--faint);font-weight:600;letter-spacing:.3px}
-  .builtwith .sp{font-size:11.5px;color:var(--ink);background:#fff;border:1px solid var(--line-2);
-    border-radius:999px;padding:4px 11px;font-weight:500}
+  .builtwith .sp{position:relative;font-size:11.5px;color:var(--ink);background:#fff;border:1px solid var(--line-2);
+    border-radius:999px;padding:4px 11px;font-weight:500;cursor:default;transition:.15s}
+  .builtwith .sp[data-tip]:hover{border-color:var(--teal);color:var(--teal-ink)}
+  .builtwith .sp[data-tip]:hover::after{
+    content:attr(data-tip);position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#fff;font-size:11.5px;font-weight:500;line-height:1.45;text-align:center;
+    padding:9px 12px;border-radius:10px;width:max-content;max-width:215px;white-space:normal;
+    box-shadow:0 10px 28px -8px rgba(0,0,0,.45);z-index:40;pointer-events:none}
+  .builtwith .sp[data-tip]:hover::before{
+    content:"";position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);
+    border:6px solid transparent;border-top-color:var(--ink);z-index:40;pointer-events:none}
   .prizes{margin-top:12px;font-size:12px;color:var(--teal-ink);font-weight:600}
 </style>
 </head>
@@ -629,7 +638,7 @@
 
   <footer>
     <div class="builtwith"><span class="bwlbl">Built with</span>
-      <span class="sp">Claude</span><span class="sp">Redis</span><span class="sp">Sentry</span><span class="sp">Deepgram</span><span class="sp">Arize Phoenix</span><span class="sp">Browserbase</span><span class="sp">Orkes Conductor</span><span class="sp">Fetch.ai / ASI:One</span><span class="sp">The Token Company</span>
+      <span class="sp" data-tip="Reads the referral, judges denial risk, and powers the case chat">Claude</span><span class="sp" data-tip="Stores agent session state + the audit trail (TTL 1h)">Redis</span><span class="sp" data-tip="Captures pipeline errors — e.g. an unreadable member ID">Sentry</span><span class="sp" data-tip="Transcribes spoken phone referrals (nova-3)">Deepgram</span><span class="sp" data-tip="Traces every agent decision step for replay">Arize Phoenix</span><span class="sp" data-tip="Auto-submits the prior-auth in a real hosted browser">Browserbase</span><span class="sp" data-tip="Runs the human approval gate + durable workflow">Orkes Conductor</span><span class="sp" data-tip="Referral → verdict from an ASI:One chat agent">Fetch.ai / ASI:One</span><span class="sp" data-tip="Compresses the context ~50% before each LLM call">The Token Company</span>
     </div>
     <div class="prizes">🏆 Best Use of Redis · 🏆 Best Use of Sentry API · 🏆 The Token Company — Ingenuity</div>
   </footer>
@@ -1035,20 +1044,26 @@ async function start(){
   if(!req)return;
   running=true;$('run').disabled=true;$('voiceBtn').disabled=true;window._payer=req.insurance?.payer||"the insurer";
 
-  // Fire the REAL backend run immediately — animation does NOT wait on it.
-  const backendP = backendUrl
-    ? fetch(backendUrl+"/process",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(req),signal:AbortSignal.timeout(120000)})
-        .then(r=>r.json()).catch(()=>null)
-    : Promise.resolve(null);
-  const local = runPipeline(req);   // local mirror streams instantly
-
   showResultsView(req.title||req.id);
-  renderSummary(req, local);
-  await streamSteps(local.steps, +$('speed').value, backendUrl?backendP:null);
 
-  const real = await backendP;
-  const result = (real && real.steps) ? real : (local._offline=true, local);
-  result._req = req;
+  // When the backend is live, run the REAL pipeline and stream ITS steps — nothing
+  // cached or simulated (fresh session every call). Mirror is the offline fallback only.
+  let result=null;
+  if(backendUrl){
+    $('nowLbl').textContent="Running";
+    $('nowTitle').textContent="Running live pre-flight checks…";
+    $('nowNode').className="node info";$('nowNode').innerHTML=SPIN;
+    try{
+      const r=await fetch(backendUrl+"/process",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(req),signal:AbortSignal.timeout(120000)});
+      result=r.ok?await r.json():null;
+    }catch(e){result=null;}
+  }
+  if(!result||!result.steps){result=runPipeline(req);result._offline=true;}  // offline fallback
+
+  result._req=req;
+  renderSummary(req, result);
+  await streamSteps(result.steps, +$('speed').value, null);  // stream the REAL backend steps
   finishWith(result);
 }
 
