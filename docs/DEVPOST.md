@@ -81,4 +81,4 @@ per-seat SaaS wedge into a workflow every specialist hits ~40 times a week.
 
 ## Built with
 
-`claude` · `anthropic-api` · `browserbase` · `orkes-conductor` · `arize-phoenix` · `deepgram` · `sentry` · `redis` · `fastapi` · `python` · `html` · `javascript`
+`claude` · `anthropic-api` · `browserbase` · `orkes-conductor` · `fetch-ai` · `uagents` · `arize-phoenix` · `deepgram` · `sentry` · `redis` · `fastapi` · `python` · `html` · `javascript`

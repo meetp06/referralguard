@@ -8,7 +8,7 @@ sentry-sdk==2.20.0         # exception capture (Best Use of Sentry API)
 deepgram-sdk==3.7.7        # voice intake for phone referrals
 requests==2.32.3           # Browserbase session API
 # Optional extras — uncomment to run the live versions of these engines:
-# playwright==1.49.0                              # drive the Browserbase hosted browser
-# arize-phoenix-otel==0.6.1                       # Phoenix tracing
-# opentelemetry-exporter-otlp-proto-http==1.29.0  # OTLP span export to Phoenix
+playwright==1.49.0         # drive the Browserbase hosted browser
+arize-phoenix-otel==0.6.1                       # Phoenix tracing
+opentelemetry-exporter-otlp-proto-http==1.29.0  # OTLP span export to Phoenix
 # conductor-python==1.1.6                         # run the Orkes Conductor workers

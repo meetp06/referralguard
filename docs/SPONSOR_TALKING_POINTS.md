@@ -82,5 +82,9 @@ Short, honest, recruiting-oriented. Lead with the project, connect to their tech
   through it, with TTLs. Simple, fast, exactly right for an agent pipeline."
 - **Arize** — "Our decision-trace spans push to Arize for visualization — the audit trail doubles as
   agent observability. How do you handle traces where each span is an LLM decision with a human-readable reason?"
+- **Fetch.ai (uAgents / Agentverse / ASI:One)** — "We expose ReferralGuard as a uAgent with the Chat
+  Protocol, so a partner clinic's agent can send a referral agent-to-agent and get a verdict back —
+  same pipeline, reached over Agentverse instead of HTTP. How do you see multi-agent marketplaces
+  working for regulated, human-in-the-loop workflows like healthcare?"
 - **SkyDeck (grand prize = Pad-13 incubator)** — "ReferralGuard is a per-seat SaaS wedge into a workflow
   every specialist hits ~40x/week. Pre-submission denial prevention with an auditable trail. Here's the one-pager."

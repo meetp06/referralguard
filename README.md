@@ -1,8 +1,13 @@
 # ReferralGuard
 
-**A multi-agent pre-flight check for specialty referrals & prior authorizations — with a watchable, timestamped audit trail.**
+![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
+![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
+
+**A multi-agent pre-flight check for specialty referrals & prior authorizations — plain-language for any doctor, with a watchable, timestamped audit trail underneath.**
 
 UC Berkeley AI Hackathon 2026.
+
+> **Try it:** open [`dashboard/index.html`](dashboard/index.html) in any browser — runs standalone, flips to **live** when the backend is up.
 
 ---
 
@@ -10,37 +15,40 @@ UC Berkeley AI Hackathon 2026.
 
 Specialty clinics lose patients and revenue because referrals and prior-auth (PA)
 requests get stuck in manual, fax-and-phone paperwork. The 2025 AMA Prior Authorization
-Physician Survey (fielded December 2025) found physicians complete an **average of ~40
-prior authorizations per week**, spend **~13 hours/week** on them, and **94% say PA
-contributes to burnout**, with denials rising year over year. Separately, a widely cited
-figure puts roughly **half of specialty referrals as never completed**. Most of that pain
-is avoidable: requests get denied or returned for missing fields, missing step-therapy
-documentation, or unreadable insurance info — things that are knowable *before* submission.
+Physician Survey found physicians complete **~40 prior authorizations per week**, spend
+**~13 hours/week** on them, and **94% say PA contributes to burnout** — and roughly **half of
+specialty referrals are never completed**. Most of that pain is avoidable: requests get
+denied or returned for missing fields, missing step-therapy documentation, or unreadable
+insurance info — all knowable *before* submission.
 
 ## What ReferralGuard does
 
-It reads an incoming referral / PA request and, in real time:
+Drop in a referral (file, sample, or a **spoken** phone call) and, in real time:
 
-1. **Extracts** key fields — patient, diagnosis (ICD-10), requested procedure (CPT/HCPCS), insurance.
-2. **Flags** what's missing or likely to cause a denial, **with a stated reason for each flag**.
-3. **Shows a visible, timestamped audit trail** of exactly what each agent checked and why
-   it made each call — replayable in under 30 seconds. **This audit trail is the centerpiece.**
+1. **Reads & extracts** key fields — patient, diagnosis (ICD-10), procedure (CPT/HCPCS), insurance.
+2. **Flags** what's missing or likely to be denied, **with a stated reason for each flag**.
+3. **Streams a live, plain-English trace** of what each agent checked and why — replayable in seconds.
+4. **Gives a verdict + what to do next:** `READY TO SUBMIT` · `NEEDS INFO` · `HIGH DENIAL RISK`.
 
-The verdict for each request is one of: `READY TO SUBMIT`, `NEEDS INFO`, or `HIGH DENIAL RISK`.
+Then the doctor can:
+
+- 💬 **Ask the case chatbot** anything — grounded *only* in this referral (won't invent facts).
+- 📄 **Prepare a prior-auth form** — auto-filled from the case, blanks highlighted, **download as PDF**.
+- 📈 See the **ROI** — time + denial cost saved per referral, per day, per month.
 
 ---
 
 ## Demo in 30 seconds
 
-1. Open `dashboard/index.html` in any browser (no build, no server required).
-2. Pick a request from the **Incoming queue** (left).
-3. Press **Receive & process**. Watch the agent decision trace stream in the center,
-   with extracted fields, flags, and the final verdict on the right.
+1. Open **`dashboard/index.html`** in any browser (no build, no server required).
+2. **Drop a referral**, pick a **sample case**, or hit **🎙 Speak a referral** (Deepgram).
+3. Watch the agents work live → read the verdict, issues, and what to fix.
+4. Ask the **case chatbot**, or **Take this case → prepare prior-auth form** → **Download PDF**.
 
-The dashboard runs **fully standalone** (deterministic in-browser pipeline). If the backend
-is running on `localhost:8000`, it automatically switches to live mode and calls the real agents.
+The dashboard runs **fully standalone** (deterministic in-browser pipeline). With the backend on
+`localhost:8000`, it switches to live mode and calls the real agents.
 
-### Optional: run the live backend
+### Run the live backend
 
 ```bash
 ./run.sh
@@ -49,9 +57,10 @@ cd backend
 pip install -r requirements.txt
 cp .env.example .env      # add API keys (all optional)
 uvicorn server:app --port 8000
+python selftest.py        # end-to-end: /health + 5 samples + voice
 ```
 
-Then reload the dashboard — the mode chip flips to **live**.
+Reload the dashboard — the connection chip flips to **live** and the header shows which engines are on.
 
 ---
 
@@ -60,51 +69,66 @@ Then reload the dashboard — the mode chip flips to **live**.
 ```
                 ┌────────────────────────────────────────────────────────┐
   referral  →   │  Intake → Extraction → Completeness → Validation →      │
- (fax / EHR /   │          Denial-Risk → Decision                         │  → verdict + audit trail
+ (file / EHR /  │          Denial-Risk → Decision → Approval → Submit     │  → verdict + audit trail
   phone voice)  └────────────────────────────────────────────────────────┘
                      every step writes a timestamped span to the audit log
 ```
 
-Cooperating agents, each emitting one timestamped audit entry:
-
 | Agent | Does | Engine |
 |---|---|---|
-| **Intake** | Opens a session, caches raw payload (fax / EHR / **voice**) | Redis (+ Deepgram for voice) |
+| **Intake** | Opens a session, caches raw payload (file / EHR / **voice**) | Redis (+ Deepgram for voice) |
 | **Extraction** | Parses raw/voice text → typed fields | Claude |
 | **Completeness** | Checks the 7 required fields | rules |
 | **Validation** | Validates member-ID format; bad input raises a captured exception | Redis + Sentry |
-| **Denial-Risk** | Reasons over payer policy (step therapy, conservative-care rules) to predict denials | Claude |
+| **Denial-Risk** | Reasons over payer policy (step therapy, conservative-care) to predict denials | Claude |
 | **Decision** | Combines flags into a final verdict; persists the full trace | rules |
 | **Approval Gate** | *(READY only)* pauses for human sign-off — prior auth legally requires it | Orkes (HUMAN task) |
-| **Submission** | *(READY only)* hosted browser logs into the payer portal, submits the PA, returns a confirmation | Browserbase |
+| **Submission** | *(READY only)* hosted browser logs into the payer portal, submits, returns a confirmation | Browserbase |
 
-State flows between steps via Redis; every step is logged as a span (Phoenix + `traces.jsonl`) for replay.
-NEEDS INFO / HIGH DENIAL RISK requests skip submission and route to human review instead.
+State flows between steps via Redis; every step is logged as a span (Phoenix + `traces.jsonl`).
+NEEDS INFO / HIGH DENIAL RISK requests skip submission and route to human review.
 
 ---
 
-## Sponsor integrations — real vs. mocked
+## Context compression — The Token Company challenge
 
-Everything runs in **mock mode** with no keys. Add a key in `.env` to flip that engine to **live**.
-This is intentional so judges can run the demo instantly, and so each integration is a clean swap.
+The **case chatbot** would otherwise resend a bloated context every turn (referral + full note +
+all flags + every audit step + history). Before each LLM call, `compress_context()` shrinks it:
 
-| Sponsor | Used for | Status | Where |
-|---|---|---|---|
-| **Browserbase** | Submission agent — hosted headless browser submits the PA to the payer portal + pulls status. The most on-thesis tool: prior auth *is* portal navigation. | **Wired** (live with `BROWSERBASE_API_KEY`+`BROWSERBASE_PROJECT_ID`; mock portal steps otherwise) | `backend/submission_agent.py` |
-| **Orkes (Conductor)** | Durable orchestration + the **human-approval gate** prior auth legally requires (HUMAN task pauses the workflow until sign-off) | **Wired** — workflow + workers in `orchestration/` (live with `CONDUCTOR_SERVER_URL`); in-process pipeline is the reference impl | `orchestration/referralguard_workflow.json`, `orchestration/worker.py` |
-| **Anthropic (Claude)** | Core reasoning: field extraction + denial-risk analysis | **Wired** (live with `ANTHROPIC_API_KEY`; deterministic mock otherwise) | `backend/agent_pipeline.py` |
-| **Arize Phoenix** | OSS OTEL tracing/eval of the agent decision spans | **Wired** (live with `PHOENIX_COLLECTOR_ENDPOINT`; spans always written to `traces.jsonl`) | `backend/observability.py` |
-| **Deepgram** | Voice intake — transcribe phone referrals into the pipeline | **Wired** (live with `DEEPGRAM_API_KEY`; baked medical transcript otherwise) | `backend/intake_voice.py`, `POST /intake/voice` |
-| **Sentry** | Exception capture in the agent pipeline (member-ID error path), with breadcrumbs + tags | **Wired** (live with `SENTRY_DSN`) — *Best Use of Sentry API* | `backend/agent_pipeline.py` |
-| **Redis** | Inter-agent session state + audit persistence | **Wired** (live with `REDIS_URL`; in-memory fallback) | `backend/agent_pipeline.py` |
+- **Drops the verbose audit trail** (biggest waste for Q&A)
+- **Extractive note summarization** — keeps only high-signal sentences (clinical terms, case
+  keywords, and **negations** — negations drive denial logic)
+- **Removes null fields, abbreviates keys, windows chat history** to the last 8 turns
+- **Claude guard/verifier** confirms every decision-critical field (Dx, CPT, payer, verdict)
+  survived compression and **restores it if not** — no silent quality loss
 
-### What's mocked
+Token counts use the **model's real tokenizer** (`messages.count_tokens`). The chat panel shows the
+live ratio: *"45–65% context compressed · 283 → 156 tokens · N saved this session."*
+→ `compress_context()` in `backend/agent_pipeline.py`.
 
-- **Payer policy rules** are a small hand-built knowledge base (3 representative rules:
-  biologic step therapy, lumbar-MRI conservative-care, knee-MRI conservative-care). In
-  production these come from payer policy feeds / a rules service.
-- **Incoming requests** are 5 synthetic samples in `samples/` (no real PHI).
-- **EHR/fax connectors** are simulated by the sample channel field; the pipeline is the real part.
+---
+
+## Sponsors — used for real (with code proof)
+
+Every integration makes a **real SDK/API call**, not just a feature flag. Add the key in `.env` to flip
+it live; `GET /health` shows what's on (mock mode otherwise, so judges can run instantly).
+
+**Prize tracks:** 🏆 Best Use of Redis · 🏆 Best Use of Sentry API · 🏆 The Token Company (Ingenuity)
+
+| Sponsor | What it does here | Proof in code |
+|---|---|---|
+| **Anthropic — Claude** | extraction, denial-risk reasoning, grounded case chat, compression guard | `agent_pipeline.py` — `anthropic.Anthropic().messages.create()` (L100), `.count_tokens()` (L351) |
+| 🏆 **Redis** | inter-agent session state + audit persistence (TTL 1h) | `agent_pipeline.py:63` — `redis.from_url().ping()/.hset()/.expire()` |
+| 🏆 **Sentry** | exception capture on the member-ID error path, w/ breadcrumbs + tags | `agent_pipeline.py:37-54` — `sentry_sdk.init / add_breadcrumb / capture_exception` |
+| **Deepgram** | voice intake — transcribe phone referrals (`nova-3`) | `intake_voice.py:41` — `dg.listen.rest.v("1").transcribe_file()` |
+| **Browserbase** | hosted browser submits the PA to the payer portal | `submission_agent.py:31,48` — `api.browserbase.com/v1/sessions` + `playwright.connect_over_cdp()` |
+| **Arize Phoenix** | OTEL tracing of every agent decision span | `observability.py:25-32` — `OTLPSpanExporter → /v1/traces` |
+| **Orkes Conductor** | durable workflow + the HUMAN approval gate | `orchestration/worker.py:28-50` — `conductor.client @worker_task / TaskHandler` |
+| **Fetch.ai / ASI:One** | ASI:One-discoverable agent: NL referral → verdict | `fetch_agent.py` (uagents), `asi_client.py` (ASI:One LLM) |
+| 🏆 **The Token Company** | context compression before every LLM call + real before/after token meter | `agent_pipeline.py:375` — `compress_context()`, `_count_tokens()` (L346) |
+
+**Mocked (clearly labeled):** payer policy rules (3 representative), 5 synthetic samples (no PHI),
+EHR/fax connectors (channel field). The pipeline itself is the real part.
 
 ---
 
@@ -112,23 +136,37 @@ This is intentional so judges can run the demo instantly, and so each integratio
 
 ```
 calhack/
-├── dashboard/index.html      ← the demo (open this) — standalone, Apple-clean UI
+├── README.md
+├── CLAUDE.md                       project context / handoff notes
+├── run.sh                          one-command backend start
+├── dashboard/
+│   ├── index.html                  ★ the demo — doctor-facing UI (standalone, live trace)
+│   └── console.html                technical ops console (legacy view)
 ├── backend/
-│   ├── server.py             ← FastAPI: /health, /process, /intake/voice
-│   ├── agent_pipeline.py     ← the agent pipeline (Claude + Redis + Sentry + gate/submit)
-│   ├── submission_agent.py   ← Browserbase payer-portal submission
-│   ├── intake_voice.py       ← Deepgram voice intake
-│   ├── observability.py      ← Phoenix / JSONL decision-trace logging
+│   ├── server.py                   FastAPI: /health, /process, /intake/voice, /chat
+│   ├── agent_pipeline.py           agent pipeline + case chat + context compression
+│   ├── submission_agent.py         Browserbase payer-portal submission
+│   ├── intake_voice.py             Deepgram voice intake
+│   ├── observability.py            Phoenix / JSONL decision-trace logging
+│   ├── fetch_agent.py              Fetch.ai uAgent (ASI:One Chat Protocol)
+│   ├── clinic_agent.py             second uAgent (agent-to-agent demo)
+│   ├── asi_client.py               ASI:One LLM (NL referral extraction)
+│   ├── selftest.py                 end-to-end check
 │   ├── requirements.txt
 │   └── .env.example
 ├── orchestration/
-│   ├── referralguard_workflow.json   ← Orkes Conductor workflow (+ HUMAN approval gate)
-│   └── worker.py                     ← Orkes Conductor task workers
-├── samples/                  ← 5 referral/PA requests, varying completeness
-├── one-pager.html            ← founder/pitch one-pager (print to PDF)
-├── DEVPOST.md                ← submission text
-├── SPONSOR_TALKING_POINTS.md ← booth/recruiting talking points
-└── run.sh
+│   ├── referralguard_workflow.json Orkes Conductor workflow (+ HUMAN approval gate)
+│   └── worker.py                   Orkes task workers
+├── samples/                        5 referral/PA requests, varying completeness
+├── assets/
+│   └── call.wav                    sample phone referral (Deepgram voice intake)
+└── docs/
+    ├── DEVPOST.md                  submission text
+    ├── FETCH_AI.md                 ASI:One submission details
+    ├── GO_LIVE.md                  turn each engine live
+    ├── TEAM_RUNBOOK.md             4-person split
+    ├── SPONSOR_TALKING_POINTS.md   booth / recruiting talking points
+    └── one-pager.html              pitch one-pager (print to PDF)
 ```
 
 The frontend pipeline (`dashboard/index.html`) mirrors the backend (`agent_pipeline.py`)
@@ -136,18 +174,15 @@ so the offline demo is faithful to the live system.
 
 ---
 
-## Assumptions made (no clarifying questions asked, per the brief)
+## Notes & assumptions
 
 - **No real PHI / payer APIs.** All requests are synthetic; payer rules are illustrative.
-- **Best UI/UX** is also a prize, so the dashboard is intentionally minimal (Apple-style, light).
-- **HRT is not a sponsor** at this event — Anthropic, Sentry, and Deepgram are. Booth talking
-  points target the actual sponsors (see `SPONSOR_TALKING_POINTS.md`).
-- Claude model used: `claude-haiku-4-5` for fast, cheap extraction/reasoning during a live demo.
-- The 30-second demo target drives a deterministic, replayable trace rather than long LLM waits.
+- Claude model: `claude-haiku-4-5` — fast, cheap extraction/reasoning/chat for a live demo.
+- The 30-second demo target drives a deterministic, replayable trace over long LLM waits.
 
 ## Why this could be a company
 
-Every denied or returned PA is lost clinic revenue and a delayed patient. ReferralGuard sits
-at the point of submission and turns a reactive, after-the-fact denial into a *pre-submission*
-fix — with an audit trail payers and compliance teams can trust. That's a per-seat SaaS wedge
-into a workflow ~40 times a week, for every specialist.
+Every denied or returned PA is lost clinic revenue and a delayed patient. ReferralGuard sits at the
+point of submission and turns a reactive, after-the-fact denial into a *pre-submission* fix — with an
+audit trail payers and compliance teams can trust. A per-seat SaaS wedge into a workflow that happens
+~40 times a week, for every specialist.

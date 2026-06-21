@@ -26,16 +26,24 @@ MOCK_TRANSCRIPT = (
 
 def transcribe(audio_path: str = None) -> dict:
     """Returns {'text': transcript, 'engine': 'deepgram'|'mock'}."""
-    if DEEPGRAM_ON and audio_path and os.path.exists(audio_path):
-        try:
-            from deepgram import DeepgramClient, PrerecordedOptions
-            dg = DeepgramClient(DEEPGRAM_KEY)
-            with open(audio_path, "rb") as f:
-                source = {"buffer": f.read()}
-            opts = PrerecordedOptions(model="nova-2-medical", smart_format=True, punctuate=True)
-            resp = dg.listen.prerecorded.v("1").transcribe_file(source, opts)
-            text = resp["results"]["channels"][0]["alternatives"][0]["transcript"]
-            return {"text": text, "engine": "deepgram"}
-        except Exception:
-            pass
-    return {"text": MOCK_TRANSCRIPT, "engine": "mock"}
+    import sys
+    if not DEEPGRAM_ON:
+        return {"text": MOCK_TRANSCRIPT, "engine": "mock"}
+    if not (audio_path and os.path.exists(audio_path)):
+        print(f"[deepgram] file not found: {audio_path}", file=sys.stderr)
+        return {"text": MOCK_TRANSCRIPT, "engine": "mock"}
+    try:
+        from deepgram import DeepgramClient, PrerecordedOptions, FileSource
+        dg = DeepgramClient(DEEPGRAM_KEY)
+        with open(audio_path, "rb") as f:
+            payload: FileSource = {"buffer": f.read()}
+        opts = PrerecordedOptions(model="nova-3", smart_format=True, punctuate=True)
+        resp = dg.listen.rest.v("1").transcribe_file(payload, opts)   # SDK v3 REST API
+        text = resp.results.channels[0].alternatives[0].transcript     # object, not dict
+        if not text:
+            print("[deepgram] empty transcript returned", file=sys.stderr)
+            return {"text": MOCK_TRANSCRIPT, "engine": "mock"}
+        return {"text": text, "engine": "deepgram"}
+    except Exception as e:
+        print(f"[deepgram] error: {type(e).__name__}: {e}", file=sys.stderr)
+        return {"text": MOCK_TRANSCRIPT, "engine": "mock"}

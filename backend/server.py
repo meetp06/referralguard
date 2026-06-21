@@ -51,15 +51,16 @@ async def intake_voice(request: Request):
         pass
     # Default to the bundled sample call so the button gives a real Deepgram transcription
     # (when DEEPGRAM_API_KEY is set) with no path coupling in the frontend.
-    default_audio = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "call.wav"))
+    default_audio = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "assets", "call.wav"))
     audio_path = body.get("audio_path") or (default_audio if os.path.exists(default_audio) else None)
     tr = voice.transcribe(audio_path)
     # Claude turns the free-form transcript into a typed request, then the normal pipeline runs.
     meta = body.get("request_meta") or {
         "id": "REF-VOICE-001", "chan": "deepgram_voice", "clinic": "Northgate Urgent Care",
-        "patient": {"name": "James O'Neill", "dob": "1981-11-02", "mrn": None},
+        "patient": {"name": "James O'Neill", "dob": "1981-11-02", "sex": "Male", "mrn": None},
         "diagnosis_code": None, "requested_cpt": "45378", "procedure": "Diagnostic colonoscopy",
-        "insurance": {"payer": "Aetna", "member_id": "AET-7781-2200", "group": None}, "npi": None,
+        "insurance": {"payer": "Aetna", "member_id": "AET-7781-2200", "group": None, "plan": "Commercial HMO"},
+        "npi": None, "provider": "Dr. Priya Nair, MD", "phone": "(510) 555-0173",
     }
     meta["raw"] = tr["text"]
     result = ap.run_pipeline(meta)
@@ -77,8 +78,9 @@ async def chat(request: Request):
         body = await request.json()
     except Exception:
         pass
-    reply = ap.claude_chat(body.get("context") or {}, body.get("messages") or [])
-    return {"reply": reply, "engine": "claude" if ap.CLAUDE_ON else "mock"}
+    out = ap.claude_chat(body.get("context") or {}, body.get("messages") or [])
+    return {"reply": out.get("reply"), "compression": out.get("compression"),
+            "engine": "claude" if ap.CLAUDE_ON else "mock"}
 
 
 # convenience: serve the dashboard if you want one process for everything

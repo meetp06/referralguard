@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ReferralGuard</title>
+<style>
+  :root{
+    --bg:#f5f5f7; --card:#ffffff; --text:#1d1d1f; --muted:#6e6e73; --line:#e3e3e6;
+    --accent:#0071e3; --green:#00a15a; --amber:#b25e00; --red:#c4183c;
+    --claude:#c2410c; --sentry:#6d28d9; --redis:#b91c1c;
+    --mono:'SF Mono',ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;height:100vh;overflow:hidden}
+  header{height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:rgba(255,255,255,.8);backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:11px}
+  .logo{width:26px;height:26px;border-radius:7px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+  .brand h1{font-size:16px;margin:0;font-weight:600;letter-spacing:-.2px}
+  .brand .sub{font-size:12px;color:var(--muted);margin-left:4px}
+  .stack{display:flex;gap:18px;align-items:center}
+  .chip{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+  .dot{width:7px;height:7px;border-radius:50%}
+  .grid{display:grid;grid-template-columns:288px 1fr 320px;gap:20px;padding:20px 28px;height:calc(100vh - 52px)}
+  .col{display:flex;flex-direction:column;min-height:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.04);display:flex;flex-direction:column;min-height:0;flex:1}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 16px;font-weight:600}
+  /* left */
+  .samples{display:flex;flex-direction:column;gap:10px;overflow:auto}
+  .sample{text-align:left;border:1px solid var(--line);background:#fff;color:var(--text);border-radius:13px;padding:13px 14px;cursor:pointer;transition:.18s}
+  .sample:hover{border-color:#c7c7cc;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+  .sample.active{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,113,227,.12)}
+  .sample .t{font-size:14px;font-weight:600;letter-spacing:-.2px}
+  .sample .d{font-size:12px;color:var(--muted);margin-top:3px}
+  .tag{display:inline-block;font-size:11px;padding:2px 9px;border-radius:999px;margin-top:9px;font-weight:600}
+  .tag.ok{background:rgba(0,161,90,.12);color:var(--green)}
+  .tag.warn{background:rgba(178,94,0,.12);color:var(--amber)}
+  .tag.risk{background:rgba(196,24,60,.1);color:var(--red)}
+  .controls{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:12px}
+  .modeflag{font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+  button.run{background:var(--accent);border:none;color:#fff;font-weight:600;padding:12px;border-radius:980px;cursor:pointer;font-size:15px;transition:.15s}
+  button.run:hover{background:#0077ed}
+  button.run:disabled{background:#c7c7cc;cursor:not-allowed}
+  .speedrow{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+  .speedrow input{flex:1;accent-color:var(--accent)}
+  /* center trace */
+  #traceWrap{flex:1;overflow:auto;margin:-4px}
+  .empty{color:var(--muted);font-size:14px;text-align:center;margin:auto;line-height:1.7;max-width:320px;padding:40px 0}
+  .step{display:grid;grid-template-columns:78px 28px 1fr;gap:12px;padding:13px 4px;opacity:0;transform:translateY(6px);animation:rise .28s forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .ts{font-family:var(--mono);font-size:11px;color:var(--muted);padding-top:4px}
+  .rail{display:flex;flex-direction:column;align-items:center}
+  .icon{width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;background:#f5f5f7;border:1px solid var(--line);flex:0 0 auto}
+  .line{width:2px;flex:1;background:var(--line);margin-top:5px;border-radius:2px}
+  .body .who{font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--text)}
+  .body .act{font-size:14px;margin:3px 0 5px;font-weight:600;letter-spacing:-.2px}
+  .body .det{font-size:13px;color:var(--muted);line-height:1.55}
+  .body code{font-family:var(--mono);font-size:11.5px;background:#f5f5f7;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#3a3a3c}
+  .badge{font-size:10px;padding:2px 7px;border-radius:6px;font-weight:700;margin-left:8px;vertical-align:1px}
+  .b-claude{background:rgba(194,65,12,.1);color:var(--claude)}
+  .b-sentry{background:rgba(109,40,217,.1);color:var(--sentry)}
+  .b-redis{background:rgba(185,28,28,.09);color:var(--redis)}
+  .b-rule{background:rgba(0,113,227,.1);color:var(--accent)}
+  .b-browserbase{background:rgba(13,148,136,.12);color:#0d9488}
+  .b-orkes{background:rgba(202,138,4,.12);color:#a16207}
+  /* right */
+  #fields{overflow:auto}
+  .kv{font-size:13px;margin-bottom:9px;display:flex;justify-content:space-between;gap:10px}
+  .kv .k{color:var(--muted)}
+  .kv .v{font-family:var(--mono);font-size:12px;text-align:right}
+  .kv .v.miss{color:var(--red)}
+  .section-t{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:16px 0 10px;border-top:1px solid var(--line);padding-top:14px;font-weight:600}
+  .flag{border-left:3px solid var(--red);background:#fbf2f4;padding:9px 11px;border-radius:8px;font-size:12.5px;margin-bottom:9px}
+  .flag.warn{border-color:var(--amber);background:#fbf6ee}
+  .flag.good{border-color:var(--green);background:#eefaf3}
+  .flag .ttl{font-weight:700;font-size:12.5px}
+  .flag .rsn{color:var(--muted);margin-top:3px;line-height:1.5}
+  .verdict{margin-top:14px;border-radius:14px;padding:16px;text-align:center;border:1px solid var(--line)}
+  .verdict .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-weight:600}
+  .verdict .val{font-size:22px;font-weight:700;margin-top:6px;letter-spacing:-.4px}
+  .verdict .sub{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.45}
+  .verdict.ok{background:#eefaf3;border-color:rgba(0,161,90,.35)} .verdict.ok .val{color:var(--green)}
+  .verdict.warn{background:#fbf6ee;border-color:rgba(178,94,0,.35)} .verdict.warn .val{color:var(--amber)}
+  .verdict.risk{background:#fbf2f4;border-color:rgba(196,24,60,.3)} .verdict.risk .val{color:var(--red)}
+  .blink{animation:blink 1s steps(2,start) infinite}@keyframes blink{to{opacity:.3}}
+  .muted-s{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">R</div>
+    <h1>ReferralGuard</h1>
+    <span class="sub">referral &amp; prior-auth pre-flight</span>
+  </div>
+  <div class="stack">
+    <div class="chip"><span class="dot" style="background:var(--claude)"></span>Claude</div>
+    <div class="chip"><span class="dot" style="background:#0d9488"></span>Browserbase</div>
+    <div class="chip"><span class="dot" style="background:#a16207"></span>Orkes</div>
+    <div class="chip"><span class="dot" style="background:var(--sentry)"></span>Sentry</div>
+    <div class="chip"><span class="dot" style="background:var(--redis)"></span>Redis</div>
+    <div class="chip" id="modeChip"><span class="dot" style="background:var(--amber)"></span><span id="modeText">offline sim</span></div>
+  </div>
+</header>
+
+<div class="grid">
+  <div class="col"><div class="card">
+    <h2>Incoming queue</h2>
+    <div class="samples" id="samples"></div>
+    <div class="controls">
+      <div class="modeflag"><span>Backend</span><span id="beStatus">checking…</span></div>
+      <div class="speedrow">Speed<input id="speed" type="range" min="120" max="700" value="320"/></div>
+      <button class="run" id="runBtn" disabled>Receive &amp; process</button>
+    </div>
+  </div></div>
+
+  <div class="col"><div class="card">
+    <h2>Audit trail — what the agent checked &amp; why</h2>
+    <div id="traceWrap"><div class="empty">Pick a request, then press <b>Receive &amp; process</b>.<br/><br/>Every agent step is timestamped and logged — the trail a clinic ops lead or auditor can replay in seconds.</div></div>
+  </div></div>
+
+  <div class="col"><div class="card">
+    <h2>Extraction &amp; flags</h2>
+    <div id="fields"><div class="empty" style="padding:24px 0">No request processed yet.</div></div>
+    <div id="flagsBox"></div>
+    <div class="verdict" id="verdict" style="display:none"><div class="lbl">Verdict</div><div class="val" id="verdictVal">—</div><div class="sub" id="verdictSub"></div></div>
+  </div></div>
+</div>
+
+<script>
+const SAMPLES = [
+  {id:"REF-2026-0612-001",title:"Cardiology consult + stress echo",clinic:"Bayview Family Medicine",chan:"fax_ocr",tag:"ok",tagText:"Looks complete",
+   patient:{name:"Maria Gonzalez",dob:"1969-04-18",mrn:"BV-88231"},diagnosis_code:"I20.0",requested_cpt:"93350",procedure:"Cardiology consult + stress echo",
+   insurance:{payer:"BlueShield PPO",member_id:"BSC-4471-9920",group:"88123"},npi:"1295847362",
+   raw:"Exertional chest pain x3wks. Troponin neg. Conservative tx (nitrates, ASA) started 5/30. EKG + lipid panel attached."},
+  {id:"REF-2026-0612-002",title:"GI — diagnostic colonoscopy",clinic:"Northgate Urgent Care",chan:"phone_intake",tag:"warn",tagText:"Missing fields",
+   patient:{name:"James O'Neill",dob:"1981-11-02",mrn:null},diagnosis_code:null,requested_cpt:"45378",procedure:"Diagnostic colonoscopy",
+   insurance:{payer:"Aetna",member_id:"AET-7781-2200",group:null},npi:null,
+   raw:"Phone referral. Rectal bleeding, family hx colon cancer. No ICD-10 stated by referring office."},
+  {id:"REF-2026-0612-003",title:"Humira (biologic) prior auth",clinic:"Summit Rheumatology",chan:"ehr_direct",tag:"risk",tagText:"Denial risk",
+   patient:{name:"Dana Whitfield",dob:"1990-07-22",mrn:"SR-2041"},diagnosis_code:"M06.9",requested_cpt:"J0135",procedure:"Adalimumab (Humira) biologic",
+   insurance:{payer:"UnitedHealthcare",member_id:"UHC-3398-1180",group:"RX-552"},npi:"1487720013",
+   raw:"RA dx. Requesting Humira. No documentation of methotrexate trial in note."},
+  {id:"REF-2026-0612-004",title:"MRI right knee prior auth",clinic:"Riverside Orthopedics",chan:"fax_ocr",tag:"warn",tagText:"Corrupt field → Sentry",
+   patient:{name:"Kevin Tran",dob:"1977-03-14",mrn:"RO-5567"},diagnosis_code:"M23.205",requested_cpt:"73721",procedure:"MRI right knee w/o contrast",
+   insurance:{payer:"Cigna",member_id:"##-OCR-ERR-##",group:"CIG-7781"},npi:"1730028841",
+   raw:"Six weeks PT documented. Member ID illegible on fax (OCR error)."},
+  {id:"REF-2026-0612-005",title:"Lumbar MRI prior auth",clinic:"Lakeside Spine & Pain",chan:"phone_intake",tag:"risk",tagText:"Denial risk",
+   patient:{name:"Patricia Lowe",dob:"1962-09-30",mrn:"LS-1190"},diagnosis_code:"M54.50",requested_cpt:"72148",procedure:"MRI lumbar spine w/o contrast",
+   insurance:{payer:"Humana Medicare Advantage",member_id:"HUM-9921-3304",group:"MA-22"},npi:"1902847711",
+   raw:"Acute LBP, onset 10 days. No red-flag neuro symptoms. No documented conservative therapy."}
+];
+const PAYER_RULES = {
+  "J0135":{name:"Adalimumab (Humira)",need:"step therapy",keywords:["methotrexate","mtx","dmard"],
+    msg:"Payer policy requires a documented trial/failure of a conventional DMARD (e.g., methotrexate) before approving a biologic."},
+  "72148":{name:"Lumbar MRI",need:"conservative therapy",keywords:["conservative therapy","physical therapy","weeks pt","red-flag","red flag"],
+    msg:"Imaging guidelines require 4–6 weeks of conservative therapy OR documented red-flag symptoms for acute low back pain."},
+  "73721":{name:"Knee MRI",need:"conservative therapy",keywords:["physical therapy","weeks pt","conservative"],
+    msg:"Payer expects a trial of conservative management (e.g., 6 weeks PT) before advanced knee imaging."}
+};
+// requirement is MET only if a keyword appears and is NOT negated nearby
+const NEGATIONS=["no ","not ","without","absent","denies","negative for","lacks","missing","none"];
+function requirementMet(hay,keywords){
+  for(const k of keywords){let idx=hay.indexOf(k);
+    while(idx!==-1){const w=hay.slice(Math.max(0,idx-28),idx);
+      if(!NEGATIONS.some(n=>w.includes(n)))return true;idx=hay.indexOf(k,idx+1);}}
+  return false;
+}
+const REQUIRED = [["patient.name","Patient name"],["patient.dob","Date of birth"],["diagnosis_code","ICD-10 diagnosis code"],
+  ["requested_cpt","Requested CPT/HCPCS"],["insurance.payer","Payer"],["insurance.member_id","Member ID"],["npi","Referring provider NPI"]];
+const MEMBER_ID_RE = /^[A-Z]{2,4}-\d{4}-\d{4}$/;
+function get(obj,path){return path.split('.').reduce((o,k)=>o&&o[k],obj);}
+
+function runPipeline(s){
+  const steps=[]; let t=0; const session="sess:"+s.id.slice(-3)+":"+Math.random().toString(36).slice(2,7);
+  const push=(o)=>{t+=40+Math.floor(Math.random()*90);steps.push({...o,ms:t});};
+  const flags=[]; let sentryEvent=null;
+  push({who:"Intake Agent",badge:"redis",act:"Request received — session opened",
+    det:`Channel <code>${s.chan}</code> · clinic “${s.clinic}”. Raw payload cached to <code>${session}</code> (TTL 1h). Redis state → <code>RECEIVED</code>.`});
+  push({who:"Extraction Agent",badge:"claude",act:"Structured fields extracted from raw text",
+    det:`Claude parsed the unstructured intake into a typed schema: patient=<code>${s.patient.name}</code> · dx=<code>${s.diagnosis_code||'∅ not found'}</code> · cpt=<code>${s.requested_cpt}</code> · payer=<code>${s.insurance.payer}</code>`});
+  const missing=REQUIRED.filter(([p])=>{const v=get(s,p);return v===null||v===undefined||v==='';});
+  push({who:"Completeness Agent",badge:"rule",act:`Required-field check: ${REQUIRED.length-missing.length}/${REQUIRED.length} present`,
+    det:missing.length?`Missing → ${missing.map(m=>'<code>'+m[1]+'</code>').join(', ')}. Each is a documented reason the payer would return the request unprocessed.`:`All required fields present. No intake gaps.`});
+  missing.forEach(m=>flags.push({sev:"warn",ttl:"Missing: "+m[1],rsn:"Payer will reject or pend a submission without this field."}));
+  push({who:"Validation Agent",badge:"redis",act:"Member ID format validation",det:`Checking <code>${s.insurance.member_id}</code> against payer ID pattern…`});
+  if(!MEMBER_ID_RE.test(s.insurance.member_id)){
+    sentryEvent="evt_"+Math.random().toString(36).slice(2,12);
+    push({who:"Sentry",badge:"sentry",act:"Exception captured — pipeline did NOT crash",
+      det:`<code>MemberIdFormatError</code> raised while normalizing insurance ID. Captured to Sentry as <code>${sentryEvent}</code> with breadcrumbs [intake→extract→validate] and tags {request_id:${s.id}}. Agent recovered → routed to human review.`});
+    flags.push({sev:"warn",ttl:"Unreadable member ID",rsn:"Intake produced an invalid member ID. Exception logged to Sentry; flagged for correction before submit."});
+  } else {
+    push({who:"Validation Agent",badge:"redis",act:"Member ID OK",det:`Format valid. Redis state → <code>VALIDATED</code>.`});
+  }
+  const rule=PAYER_RULES[s.requested_cpt];
+  push({who:"Denial-Risk Agent",badge:"claude",act:`Payer-policy reasoning for ${s.insurance.payer}`,
+    det:rule?`Procedure ${rule.name} (CPT ${s.requested_cpt}) has a known <b>${rule.need}</b> requirement. Scanning clinical note for supporting evidence…`:`CPT ${s.requested_cpt}: no high-risk utilization rule on file. Checking baseline medical-necessity language…`});
+  if(rule){
+    const hay=(s.raw+" "+s.procedure).toLowerCase();
+    if(!requirementMet(hay,rule.keywords)){
+      push({who:"Denial-Risk Agent",badge:"claude",act:`HIGH denial risk — ${rule.need} not documented`,
+        det:`${rule.msg} No supporting evidence found in the referral. Predicted outcome: <b>denial / pend</b> if submitted as-is.`});
+      flags.push({sev:"risk",ttl:`Likely denial: ${rule.need} not documented`,rsn:rule.msg});
+    } else {
+      push({who:"Denial-Risk Agent",badge:"claude",act:`${rule.need} requirement satisfied`,det:`Found supporting evidence in note. Requirement met.`});
+    }
+  }
+  const hasRisk=flags.some(f=>f.sev==="risk"),hasWarn=flags.some(f=>f.sev==="warn");
+  let verdict,vclass,vsub;
+  if(hasRisk){verdict="HIGH DENIAL RISK";vclass="risk";vsub="Fix the flagged gap before submitting — high probability of denial.";}
+  else if(hasWarn){verdict="NEEDS INFO";vclass="warn";vsub="Return to referring clinic for the missing or invalid fields.";}
+  else{verdict="READY TO SUBMIT";vclass="ok";vsub="All checks passed. Safe to submit to the payer.";}
+  push({who:"Decision Agent",badge:"rule",act:`Final verdict: ${verdict}`,
+    det:`Derived from ${flags.length} flag(s). Full trace persisted to <code>${session}:audit</code> for replay. Redis state → <code>${vclass==='ok'?'READY':vclass==='warn'?'NEEDS_INFO':'AT_RISK'}</code>.`});
+  // 7. Human approval gate (Orkes) + portal submission (Browserbase) — only when READY
+  let submission=null;
+  if(vclass==='ok'){
+    push({who:"Approval Gate",badge:"orkes",act:"Human-in-the-loop approval — required for prior auth",
+      det:`Conductor <code>HUMAN</code> task created and awaiting sign-off (prior auth legally requires a human). Approved by <code>ops@clinic</code>. Workflow resumes.`});
+    const conf="PA-"+Math.random().toString(36).slice(2,10).toUpperCase();
+    push({who:"Submission Agent",badge:"browserbase",act:`Opened hosted browser → ${s.insurance.payer} portal`,
+      det:`Browserbase headless Chrome logs in and navigates the payer portal. Auto-filling member ID, CPT <code>${s.requested_cpt}</code>, dx <code>${s.diagnosis_code}</code>, NPI <code>${s.npi}</code>…`});
+    push({who:"Submission Agent",badge:"browserbase",act:`Submitted — confirmation ${conf}`,
+      det:`Form submitted through the hosted browser. Payer status: <code>RECEIVED / PENDING REVIEW</code>. Confirmation persisted to the audit trail.`});
+    submission={confirmation:conf,status:"RECEIVED"};
+  } else {
+    push({who:"Routing Agent",badge:"rule",act:"Routed to human review queue",
+      det:`Not eligible for auto-submission. Returned to the referring clinic with the flagged reasons attached.`});
+  }
+  return {steps,flags,verdict,vclass,vsub,session,sentryEvent,missing,submission};
+}
+
+const ICONS={"Intake Agent":"📥","Extraction Agent":"🤖","Completeness Agent":"✓","Validation Agent":"🔎","Sentry":"🛡","Denial-Risk Agent":"⚖","Decision Agent":"🏁","Approval Gate":"✋","Submission Agent":"🌐","Routing Agent":"↪"};
+const BADGE={claude:["b-claude","CLAUDE"],sentry:["b-sentry","SENTRY"],redis:["b-redis","REDIS"],rule:["b-rule","RULE"],browserbase:["b-browserbase","BROWSERBASE"],orkes:["b-orkes","ORKES"]};
+let selected=null,running=false,backendUrl=null;
+const $=id=>document.getElementById(id);
+const samplesEl=$('samples'),traceWrap=$('traceWrap'),fieldsEl=$('fields'),flagsBox=$('flagsBox'),verdictEl=$('verdict');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const fmtTs=ms=>new Date(1750000000000+ms).toISOString().slice(11,23);
+
+SAMPLES.forEach((s,i)=>{
+  const b=document.createElement('button');b.className='sample';
+  b.innerHTML=`<div class="t">${s.title}</div><div class="d">${s.clinic} · ${s.chan}</div><span class="tag ${s.tag}">${s.tagText}</span>`;
+  b.onclick=()=>{if(running)return;document.querySelectorAll('.sample').forEach(x=>x.classList.remove('active'));b.classList.add('active');selected=i;$('runBtn').disabled=false;};
+  samplesEl.appendChild(b);
+});
+
+async function processRequest(){
+  if(selected===null||running)return;
+  running=true;$('runBtn').disabled=true;
+  traceWrap.innerHTML='';fieldsEl.innerHTML='';flagsBox.innerHTML='';verdictEl.style.display='none';
+  const s=SAMPLES[selected];
+  let result;
+  if(backendUrl){
+    try{const r=await fetch(backendUrl+"/process",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(s)});result=await r.json();}
+    catch(e){result=runPipeline(s);}
+  } else { result=runPipeline(s); }
+  const speed=+$('speed').value;
+  renderFields(s,result);
+  for(let i=0;i<result.steps.length;i++){
+    const st=result.steps[i],last=i===result.steps.length-1;
+    const [bc,bt]=BADGE[st.badge]||["b-rule","RULE"];
+    const div=document.createElement('div');div.className='step';
+    div.innerHTML=`<div class="ts">${fmtTs(st.ms)}</div>
+      <div class="rail"><div class="icon">${ICONS[st.who]||"•"}</div>${last?'':'<div class="line"></div>'}</div>
+      <div class="body"><div class="who">${st.who.toUpperCase()}<span class="badge ${bc}">${bt}</span></div>
+      <div class="act">${st.act}</div><div class="det">${st.det}</div></div>`;
+    traceWrap.appendChild(div);traceWrap.scrollTop=traceWrap.scrollHeight;
+    await sleep(speed);
+  }
+  renderFlags(result);
+  verdictEl.className="verdict "+result.vclass;verdictEl.style.display='block';
+  $('verdictVal').textContent=result.verdict;
+  $('verdictSub').innerHTML=result.vsub+(result.submission&&result.submission.confirmation?`<br/><b>Submitted via Browserbase</b> · confirmation <code style="font-family:var(--mono)">${result.submission.confirmation}</code>`:'');
+  running=false;$('runBtn').disabled=false;
+}
+function renderFields(s,r){
+  const miss=new Set((r.missing||[]).map(m=>m[0]));
+  const row=(k,v,path)=>`<div class="kv"><span class="k">${k}</span><span class="v ${(!v||miss.has(path))?'miss':''}">${v||'— missing'}</span></div>`;
+  fieldsEl.innerHTML=row("Request ID",s.id)+row("Patient",s.patient.name,"patient.name")+row("DOB",s.patient.dob,"patient.dob")+
+    row("ICD-10",s.diagnosis_code,"diagnosis_code")+row("CPT/HCPCS",s.requested_cpt,"requested_cpt")+row("Procedure",s.procedure)+
+    row("Payer",s.insurance.payer,"insurance.payer")+row("Member ID",s.insurance.member_id,"insurance.member_id")+row("Referring NPI",s.npi,"npi")+
+    `<div class="section-t">Flags</div>`;
+  flagsBox.innerHTML=`<div class="muted-s blink">analyzing…</div>`;
+}
+function renderFlags(r){
+  if(!r.flags.length){flagsBox.innerHTML=`<div class="flag good"><div class="ttl" style="color:var(--green)">No issues found</div><div class="rsn">All required fields present and no payer-rule conflicts detected.</div></div>`;return;}
+  flagsBox.innerHTML=r.flags.map(f=>`<div class="flag ${f.sev==='risk'?'':'warn'}"><div class="ttl">${f.ttl}</div><div class="rsn">${f.rsn}</div></div>`).join('');
+}
+$('runBtn').onclick=processRequest;
+
+(async()=>{
+  try{const res=await fetch("http://localhost:8000/health",{signal:AbortSignal.timeout(900)});
+    if(res.ok){const j=await res.json();backendUrl="http://localhost:8000";
+      $('beStatus').textContent="connected ✓";
+      $('modeChip').innerHTML='<span class="dot" style="background:var(--green)"></span><span>live: '+(j.claude?'Claude':'mock')+'</span>';
+      return;}
+  }catch(e){}
+  $('beStatus').textContent="not running (offline sim)";
+})();
+</script>
+</body>
+</html>

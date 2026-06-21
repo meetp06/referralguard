@@ -330,21 +330,115 @@ def _mock_chat(context):
         return f"This referral is **{v}**. Issues found in the pre-flight:\n{bul}\n\n(Connect ANTHROPIC_API_KEY for full conversational Q&A.)"
     return f"This referral is **{v}** — all checks passed and no issues were found. (Connect ANTHROPIC_API_KEY for full conversational Q&A.)"
 
+# ---- Context compression (The Token Company challenge) ----------
+# Goal: send the LLM the *smallest* context that still answers the question.
+# We measure real token counts before/after and a guard verifies no critical
+# field was dropped. The audit trail (10+ verbose steps) is the biggest waste
+# for Q&A, so the compressor drops it and keeps only the decision-relevant signal.
+_CLINICAL = ("pain", "bleed", "fracture", "trial", "failed", "therapy", "pt ", "weeks",
+             "mri", "biopsy", "symptom", "history", "hx", "dx", "neg", "positive",
+             "contrast", "dmard", "methotrexate", "red-flag", "red flag", "conservative")
+_NEG = ("no ", "not ", "without", "absent", "denies", "negative for", "lacks", "missing", "none")
+
+def _sentences(t):
+    return [s.strip() for s in re.split(r'(?<=[.!?])\s+', (t or "").replace("\n", " ")) if s.strip()]
+
+def _count_tokens(text):
+    """Real token count via the model's own tokenizer; heuristic fallback (~4 chars/token)."""
+    text = text or " "
+    if CLAUDE_ON:
+        try:
+            r = _claude().messages.count_tokens(
+                model="claude-haiku-4-5-20251001",
+                messages=[{"role": "user", "content": text}])
+            return int(r.input_tokens)
+        except Exception:
+            pass
+    return max(1, (len(text) + 3) // 4)
+
+def _compress_note(raw, signal_terms, max_sent=4):
+    """Extractive compression: keep the highest-signal sentences (clinical terms,
+    case-specific keywords, and negations — negations drive denial logic)."""
+    sents = _sentences(raw)
+    if len(sents) <= max_sent:
+        return (raw or "").strip()
+    scored = []
+    for i, s in enumerate(sents):
+        low = s.lower()
+        score = sum(2 for k in signal_terms if k and k in low)
+        score += sum(1 for w in _CLINICAL if w in low)
+        score += sum(1 for n in _NEG if n in low)
+        scored.append((score, i, s))
+    top = sorted(scored, key=lambda x: -x[0])[:max_sent]
+    return " ".join(s for _, _, s in sorted(top, key=lambda x: x[1]))
+
+def compress_context(c):
+    """Returns (compressed_text, stats, verbose_text). `verbose_text` is the
+    uncompressed baseline we'd otherwise send — used for the before/after number."""
+    c = c or {}
+    r = c.get("request") or {}
+    pat = r.get("patient") or {}
+    ins = r.get("insurance") or {}
+    verbose = _format_context(c)
+
+    sig = [str(r.get(k) or "").lower() for k in ("diagnosis_code", "requested_cpt", "procedure")]
+    sig += [str(ins.get("payer") or "").lower()]
+    sig = [s for s in sig if s]
+    note = _compress_note(r.get("raw") or "", sig)
+
+    member = ins.get("member_id")
+    if member and not MEMBER_ID_RE.match(member):
+        member = "UNREADABLE"
+
+    def nn(label, val):
+        return f"{label} {val}" if val not in (None, "", "null") else None
+    parts = [
+        nn("Pt:", f"{pat.get('name')}, DOB {pat.get('dob')}" + (f", {pat.get('sex')}" if pat.get('sex') else "")),
+        nn("Dx:", r.get("diagnosis_code")),
+        nn("Svc:", f"{r.get('procedure')} (CPT {r.get('requested_cpt')})"),
+        nn("Payer:", (ins.get("payer") or "") + (f", Member {member}" if member else "")),
+        nn("NPI:", r.get("npi")),
+    ]
+    fields = "; ".join(p for p in parts if p)
+    flags = c.get("flags") or []
+    fl = "; ".join(f"{f.get('ttl')} — {f.get('rsn')}" for f in flags) if flags else "none"
+    comp = f"{fields}.\nNote: {note}\nVerdict: {c.get('verdict')}. Issues: {fl}."
+
+    # GUARD: verify the compressed brief still carries every field needed to answer.
+    # If compression dropped a critical value, restore it (no silent quality loss).
+    restored = []
+    for key, val in [("Dx", r.get("diagnosis_code")), ("CPT", r.get("requested_cpt")),
+                     ("Payer", ins.get("payer")), ("Verdict", c.get("verdict"))]:
+        if val and str(val) not in comp:
+            restored.append(key)
+            comp += f"\n{key}: {val}"
+
+    before, after = _count_tokens(verbose), _count_tokens(comp)
+    ratio = max(0, round(100 * (1 - after / before))) if before else 0
+    stats = {"before": before, "after": after, "ratio": ratio,
+             "steps_dropped": len(c.get("steps") or []), "guard_restored": restored}
+    return comp, stats, verbose
+
 def claude_chat(context, messages):
-    """Grounded Q&A over a single case. `messages` = full [{role,content}] history."""
+    """Grounded Q&A over a single case. Returns {reply, compression}.
+    Context is COMPRESSED before being sent to the LLM (Token Company challenge);
+    chat history is windowed to the last 8 turns to cap token growth."""
     msgs = [{"role": m.get("role"), "content": str(m.get("content", ""))}
             for m in (messages or []) if m.get("content") and m.get("role") in ("user", "assistant")]
+    msgs = msgs[-8:]  # rolling window — older turns dropped to keep token count flat
+    comp, stats, _ = compress_context(context)
     if not msgs:
-        return "Ask me anything about this referral — I'll answer only from this case's data."
+        return {"reply": "Ask me anything about this referral — I'll answer only from this case's data.",
+                "compression": stats}
     if not CLAUDE_ON:
-        return _mock_chat(context)
+        return {"reply": _mock_chat(context), "compression": stats}
     try:
-        sentry_breadcrumb("chat", {"turns": len(msgs)})
+        sentry_breadcrumb("chat", {"turns": len(msgs), "ratio": stats["ratio"]})
         resp = _claude().messages.create(
             model="claude-haiku-4-5-20251001", max_tokens=600,
-            system=CHAT_SYSTEM + "\n\nCASE CONTEXT:\n" + _format_context(context),
+            system=CHAT_SYSTEM + "\n\nCASE CONTEXT (compressed):\n" + comp,
             messages=msgs)
-        return resp.content[0].text.strip()
+        return {"reply": resp.content[0].text.strip(), "compression": stats}
     except Exception as e:
         sentry_capture(e, {"stage": "chat"})
-        return _mock_chat(context)
+        return {"reply": _mock_chat(context), "compression": stats}
