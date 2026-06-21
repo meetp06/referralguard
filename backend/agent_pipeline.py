@@ -26,7 +26,16 @@ SENTRY_ON = False
 try:
     if SENTRY_DSN:
         import sentry_sdk
-        sentry_sdk.init(dsn=SENTRY_DSN, traces_sample_rate=1.0, environment="hackathon-demo")
+        # arize-phoenix pulls in an incompatible `strawberry`; sentry's auto Strawberry
+        # integration then crashes init. Disable just that one (manual capture is unaffected).
+        disabled = []
+        try:
+            from sentry_sdk.integrations.strawberry import StrawberryIntegration
+            disabled.append(StrawberryIntegration())
+        except Exception:
+            pass
+        sentry_sdk.init(dsn=SENTRY_DSN, traces_sample_rate=1.0, environment="hackathon-demo",
+                        disabled_integrations=disabled)
         SENTRY_ON = True
 except Exception:
     SENTRY_ON = False
@@ -267,3 +276,75 @@ def run_pipeline(req: dict) -> dict:
             "engines": {"claude": CLAUDE_ON, "redis": REDIS_ON, "sentry": SENTRY_ON,
                         "phoenix": obs.PHOENIX_ON, "deepgram": __import__("intake_voice").DEEPGRAM_ON,
                         "browserbase": sub_agent.BROWSERBASE_ON, "orkes": ORKES_ON}}
+
+
+# ---- Case chat (grounded Q&A about ONE referral) ----------------
+CHAT_SYSTEM = """You are ReferralGuard's case assistant, helping a clinician understand ONE specific referral / prior-authorization pre-flight result.
+
+Ground EVERY answer strictly in the CASE CONTEXT provided below. Hard rules:
+1. Never invent patient facts, diagnosis or CPT codes, payer policies, dates, names, or numbers that are not in the context.
+2. If the user asks for something the context does not contain, say plainly: "That isn't in this referral," and suggest what would need to be added.
+3. When you explain a denial risk or a missing field, quote the exact flag reason from the context.
+4. You may give general, non-fabricated next-step guidance (e.g. "attach documentation of a methotrexate trial"), but do not invent specific clinical details for this patient.
+5. Be concise and plain-language — a busy doctor is reading. Use short paragraphs or bullet points.
+Stay on this referral only; do not answer unrelated questions."""
+
+def _format_context(c):
+    c = c or {}
+    r = c.get("request") or {}
+    pat = r.get("patient") or {}
+    ins = r.get("insurance") or {}
+    L = []
+    L.append(f"Patient: {pat.get('name')}, DOB {pat.get('dob')}")
+    L.append(f"Diagnosis (ICD-10): {r.get('diagnosis_code')}")
+    L.append(f"Procedure: {r.get('procedure')} (CPT {r.get('requested_cpt')})")
+    L.append(f"Payer: {ins.get('payer')} | Member ID: {ins.get('member_id')}")
+    L.append(f"Referring NPI: {r.get('npi')}")
+    if r.get("raw"):
+        L.append(f'Referral note / call transcript: "{r.get("raw")}"')
+    L.append("")
+    L.append(f"PRE-FLIGHT VERDICT: {c.get('verdict')}")
+    flags = c.get("flags") or []
+    if flags:
+        L.append("FLAGS (issues found):")
+        for f in flags:
+            L.append(f"  - {f.get('ttl')}: {f.get('rsn')}")
+    else:
+        L.append("FLAGS: none — all checks passed.")
+    missing = c.get("missing") or []
+    if missing:
+        labels = [m[1] if isinstance(m, (list, tuple)) and len(m) > 1 else str(m) for m in missing]
+        L.append("MISSING REQUIRED FIELDS: " + ", ".join(labels))
+    steps = c.get("steps") or []
+    if steps:
+        L.append("AUDIT STEPS RUN:")
+        for s in steps:
+            L.append(f"  - {s.get('who')}: {s.get('act')}")
+    return "\n".join(str(x) for x in L)
+
+def _mock_chat(context):
+    v = (context or {}).get("verdict")
+    flags = (context or {}).get("flags") or []
+    if flags:
+        bul = "\n".join(f"• {f.get('ttl')} — {f.get('rsn')}" for f in flags)
+        return f"This referral is **{v}**. Issues found in the pre-flight:\n{bul}\n\n(Connect ANTHROPIC_API_KEY for full conversational Q&A.)"
+    return f"This referral is **{v}** — all checks passed and no issues were found. (Connect ANTHROPIC_API_KEY for full conversational Q&A.)"
+
+def claude_chat(context, messages):
+    """Grounded Q&A over a single case. `messages` = full [{role,content}] history."""
+    msgs = [{"role": m.get("role"), "content": str(m.get("content", ""))}
+            for m in (messages or []) if m.get("content") and m.get("role") in ("user", "assistant")]
+    if not msgs:
+        return "Ask me anything about this referral — I'll answer only from this case's data."
+    if not CLAUDE_ON:
+        return _mock_chat(context)
+    try:
+        sentry_breadcrumb("chat", {"turns": len(msgs)})
+        resp = _claude().messages.create(
+            model="claude-haiku-4-5-20251001", max_tokens=600,
+            system=CHAT_SYSTEM + "\n\nCASE CONTEXT:\n" + _format_context(context),
+            messages=msgs)
+        return resp.content[0].text.strip()
+    except Exception as e:
+        sentry_capture(e, {"stage": "chat"})
+        return _mock_chat(context)

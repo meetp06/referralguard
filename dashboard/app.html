@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ReferralGuard — referral pre-flight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FBFAF6; --card:#FFFFFF; --ink:#1A2330; --muted:#5B6573; --faint:#8A93A1;
+    --line:#ECE7DD; --line-2:#E2DCCF;
+    --teal:#0E7C72; --teal-ink:#0B5A53; --teal-soft:#E6F2F0;
+    --green:#0C7A54; --green-soft:#E7F4ED;
+    --amber:#B4630B; --amber-soft:#FBF1E2;
+    --crimson:#B4233C; --crimson-soft:#FBECEF;
+    --claude:#C2410C; --sentry:#6D28D9; --redis:#B91C1C; --orkes:#A16207; --bb:#0D9488;
+    --display:'Fraunces','Iowan Old Style',Georgia,serif;
+    --sans:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    --mono:'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace;
+    --shadow:0 1px 2px rgba(26,35,48,.04),0 8px 24px -12px rgba(26,35,48,.12);
+    --shadow-lg:0 2px 4px rgba(26,35,48,.05),0 24px 60px -24px rgba(26,35,48,.22);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;
+    -webkit-font-smoothing:antialiased;min-height:100vh;
+    background:
+      radial-gradient(1100px 620px at 88% -8%, rgba(14,124,114,.10), transparent 60%),
+      radial-gradient(900px 600px at 6% 4%, rgba(180,99,11,.06), transparent 55%),
+      var(--paper);
+  }
+  /* subtle paper grain */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.025'/%3E%3C/svg%3E");}
+  .wrap{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:0 24px 96px}
+
+  /* ---------- header ---------- */
+  header{position:sticky;top:0;z-index:20;backdrop-filter:saturate(180%) blur(16px);
+    background:rgba(251,250,246,.82);border-bottom:1px solid var(--line)}
+  .hd{max-width:980px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(150deg,var(--teal),var(--teal-ink));
+    display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 4px 12px -4px rgba(14,124,114,.6)}
+  .brand .nm{font-family:var(--display);font-weight:600;font-size:19px;letter-spacing:-.3px;line-height:1}
+  .brand .tag{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .engines{display:flex;align-items:center;gap:14px}
+  .eng{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .eng .d{width:7px;height:7px;border-radius:50%;background:#cdd3da;transition:.3s}
+  .eng.on .d{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+  .conn{font-size:12px;color:var(--faint);display:flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--line-2);border-radius:999px;background:#fff}
+  .conn .d{width:7px;height:7px;border-radius:50%;background:var(--amber)}
+  .conn.live .d{background:var(--green);box-shadow:0 0 0 3px var(--green-soft)}
+  @media(max-width:760px){.engines{display:none}}
+
+  /* ---------- hero / intake ---------- */
+  .hero{padding:46px 0 8px;text-align:center}
+  .eyebrow{font-size:12.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--teal);font-weight:600}
+  .hero h1{font-family:var(--display);font-weight:600;font-size:clamp(30px,5vw,46px);line-height:1.05;
+    letter-spacing:-1px;margin:14px 0 0}
+  .hero h1 em{font-style:italic;color:var(--teal-ink)}
+  .hero p{max-width:560px;margin:14px auto 0;color:var(--muted);font-size:16px}
+
+  .intake{margin-top:30px}
+  .drop{background:var(--card);border:1.5px dashed var(--line-2);border-radius:20px;padding:30px 24px;
+    text-align:center;cursor:pointer;transition:.2s;box-shadow:var(--shadow)}
+  .drop:hover{border-color:var(--teal);background:#fff;transform:translateY(-1px)}
+  .drop.over{border-color:var(--teal);background:var(--teal-soft);transform:scale(1.005)}
+  .drop .ic{width:46px;height:46px;border-radius:13px;background:var(--teal-soft);color:var(--teal-ink);
+    display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+  .drop .big{font-weight:600;font-size:16px}
+  .drop .small{font-size:13px;color:var(--muted);margin-top:4px}
+  .drop .small b{color:var(--teal-ink)}
+
+  .whatfile{margin-top:12px}
+  .whatfile > summary{font-size:13px;color:var(--teal-ink);font-weight:600;cursor:pointer;list-style:none;
+    display:inline-flex;align-items:center;gap:7px;padding:7px 0;user-select:none}
+  .whatfile > summary::-webkit-details-marker{display:none}
+  .whatfile > summary::before{content:"?";width:17px;height:17px;border-radius:50%;background:var(--teal-soft);
+    color:var(--teal-ink);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+  .whatfile[open] > summary{margin-bottom:6px}
+  .whatbox{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);font-size:13.5px;color:var(--muted)}
+  .whatbox p{margin:0 0 10px}.whatbox p:last-child{margin-bottom:0}
+  .whatbox b{color:var(--ink)} .whatbox code{font-family:var(--mono);font-size:12px;background:#FAF8F3;border:1px solid var(--line-2);border-radius:5px;padding:1px 5px;color:var(--teal-ink)}
+  .whatbox pre{font-family:var(--mono);font-size:11.5px;line-height:1.6;background:#FAF8F3;border:1px solid var(--line);
+    border-radius:10px;padding:13px 15px;color:#404a57;overflow:auto;margin:0 0 12px}
+  .whatbox .tip{font-size:12.5px;color:var(--teal-ink);background:var(--teal-soft);border-radius:9px;padding:9px 12px}
+
+  .or{display:flex;align-items:center;gap:14px;color:var(--faint);font-size:12px;
+    letter-spacing:.6px;text-transform:uppercase;margin:22px 0 16px}
+  .or::before,.or::after{content:"";height:1px;background:var(--line-2);flex:1}
+
+  .cases{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .case{position:relative;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:15px 16px 16px;cursor:pointer;transition:.16s;box-shadow:var(--shadow)}
+  .case:hover{border-color:var(--line-2);transform:translateY(-2px);box-shadow:var(--shadow-lg)}
+  .case.sel{border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft),var(--shadow)}
+  .case .ct{font-weight:600;font-size:15px;letter-spacing:-.2px}
+  .case .cc{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .case .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;
+    padding:3px 9px;border-radius:999px;margin-top:11px}
+  .pill .pd{width:6px;height:6px;border-radius:50%}
+  .pill.ok{background:var(--green-soft);color:var(--green)} .pill.ok .pd{background:var(--green)}
+  .pill.warn{background:var(--amber-soft);color:var(--amber)} .pill.warn .pd{background:var(--amber)}
+  .pill.risk{background:var(--crimson-soft);color:var(--crimson)} .pill.risk .pd{background:var(--crimson)}
+
+  .startbar{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:26px}
+  .run{font-family:var(--sans);font-weight:600;font-size:16px;color:#fff;border:none;cursor:pointer;
+    padding:14px 30px;border-radius:999px;background:linear-gradient(150deg,var(--teal),var(--teal-ink));
+    box-shadow:0 10px 24px -10px rgba(14,124,114,.7);transition:.16s;display:inline-flex;align-items:center;gap:10px}
+  .run:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 14px 30px -10px rgba(14,124,114,.8)}
+  .run:disabled{background:#c9cdd3;box-shadow:none;cursor:not-allowed}
+  .voicebtn{font-family:var(--sans);font-weight:600;font-size:15px;color:var(--sentry);background:#fff;
+    border:1.5px solid #DBD2F3;border-radius:999px;padding:13px 22px;cursor:pointer;display:inline-flex;align-items:center;gap:9px;transition:.15s}
+  .voicebtn:hover:not(:disabled){background:#F1EEFB;border-color:var(--sentry);transform:translateY(-1px)}
+  .voicebtn:disabled{opacity:.5;cursor:not-allowed}
+  .speed{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--muted)}
+  .speed input{accent-color:var(--teal);width:88px}
+
+  /* transcript (voice intake) */
+  .tcard{background:linear-gradient(180deg,#fff,#F3F0FC);border:1px solid #DBD2F3;border-radius:18px;
+    padding:18px 20px;box-shadow:var(--shadow);margin-bottom:20px;animation:rise .45s cubic-bezier(.2,.7,.3,1)}
+  .tcard .th{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:600;letter-spacing:.7px;text-transform:uppercase;color:var(--sentry)}
+  .tcard .th .mic{width:26px;height:26px;border-radius:8px;background:#EDE9FB;color:var(--sentry);display:flex;align-items:center;justify-content:center}
+  .tpill{font-size:11px;font-weight:600;text-transform:none;letter-spacing:0;padding:2px 9px;border-radius:999px;background:#EDE9FB;color:var(--sentry);margin-left:auto}
+  .tpill.live{background:var(--green-soft);color:var(--green)}
+  .tcard .tbody{margin-top:11px;font-size:14.5px;line-height:1.65;color:var(--ink);font-style:italic}
+  .tcard .tbody::before{content:"“";font-family:var(--display);font-size:20px;color:var(--sentry);margin-right:2px}
+  .tcard .tbody::after{content:"”";font-family:var(--display);font-size:20px;color:var(--sentry);margin-left:2px}
+
+  /* ---------- running header ---------- */
+  .nowcard{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px 20px;
+    box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+  .nowcard .left{display:flex;align-items:center;gap:14px;min-width:0}
+  .nowcard .lbl{font-size:12px;color:var(--faint);text-transform:uppercase;letter-spacing:.7px}
+  .nowcard .tt{font-weight:600;font-size:16px;letter-spacing:-.2px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .reset{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--teal-ink);background:var(--teal-soft);
+    border:none;border-radius:999px;padding:8px 16px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .reset:hover{background:#d7e9e6}
+  .prog{display:flex;align-items:center;gap:11px}
+  .prog .bar{width:120px;height:6px;border-radius:99px;background:var(--line);overflow:hidden}
+  .prog .fill{height:100%;width:0;background:linear-gradient(90deg,var(--teal),var(--teal-ink));border-radius:99px;transition:width .4s cubic-bezier(.4,0,.2,1)}
+  .prog .num{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:34px}
+
+  /* ---------- verdict ---------- */
+  .verdict{border-radius:22px;padding:26px 28px;margin-bottom:20px;border:1px solid var(--line);
+    box-shadow:var(--shadow-lg);opacity:0;transform:translateY(10px);transition:.5s cubic-bezier(.2,.7,.3,1);
+    display:flex;gap:22px;align-items:flex-start;position:relative;overflow:hidden}
+  .verdict.show{opacity:1;transform:none}
+  .verdict::after{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;border-radius:50%;opacity:.5;filter:blur(8px)}
+  .verdict.ok{background:linear-gradient(180deg,#fff,var(--green-soft));border-color:rgba(12,122,84,.3)}
+  .verdict.ok::after{background:radial-gradient(circle,rgba(12,122,84,.16),transparent 70%)}
+  .verdict.warn{background:linear-gradient(180deg,#fff,var(--amber-soft));border-color:rgba(180,99,11,.3)}
+  .verdict.warn::after{background:radial-gradient(circle,rgba(180,99,11,.16),transparent 70%)}
+  .verdict.risk{background:linear-gradient(180deg,#fff,var(--crimson-soft));border-color:rgba(180,35,60,.3)}
+  .verdict.risk::after{background:radial-gradient(circle,rgba(180,35,60,.16),transparent 70%)}
+  .vbadge{flex:0 0 auto;width:58px;height:58px;border-radius:16px;display:flex;align-items:center;justify-content:center;color:#fff;z-index:1}
+  .verdict.ok .vbadge{background:var(--green)} .verdict.warn .vbadge{background:var(--amber)} .verdict.risk .vbadge{background:var(--crimson)}
+  .vmain{z-index:1;min-width:0}
+  .vmain .lbl{font-size:12.5px;letter-spacing:1px;text-transform:uppercase;font-weight:600;color:var(--muted)}
+  .vmain h2{font-family:var(--display);font-weight:600;font-size:30px;letter-spacing:-.6px;margin:3px 0 0;line-height:1.05}
+  .verdict.ok h2{color:var(--green)} .verdict.warn h2{color:var(--amber)} .verdict.risk h2{color:var(--crimson)}
+  .vmain .say{font-size:15.5px;color:var(--ink);margin-top:9px;max-width:560px}
+  .vmain .conf{margin-top:12px;font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:8px;
+    background:#fff;border:1px solid var(--line-2);border-radius:10px;padding:7px 12px}
+  .vmain .conf code{font-family:var(--mono);font-size:12px;color:var(--green)}
+
+  /* ---------- layout for results ---------- */
+  .cols{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:var(--shadow)}
+  .panel h3{font-size:12.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--faint);font-weight:600;margin:0 0 18px;display:flex;align-items:center;gap:8px}
+  .panel h3 .c{color:var(--muted);font-weight:500;letter-spacing:0;text-transform:none}
+
+  /* ---------- live timeline ---------- */
+  .tl{display:flex;flex-direction:column}
+  .row{display:grid;grid-template-columns:36px 1fr;gap:14px;position:relative;padding-bottom:18px;
+    opacity:0;transform:translateY(8px);animation:rise .42s cubic-bezier(.2,.7,.3,1) forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .row:last-child{padding-bottom:0}
+  .rail{display:flex;flex-direction:column;align-items:center}
+  .node{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+    background:#fff;border:1px solid var(--line-2);color:var(--muted);flex:0 0 auto;transition:.3s;z-index:1}
+  .node.info{background:#fff;border-color:var(--line-2);color:var(--teal-ink)}
+  .node.ai{background:#FFF3EC;border-color:#F3D6C4;color:var(--claude)}
+  .node.check{background:var(--green-soft);border-color:rgba(12,122,84,.3);color:var(--green)}
+  .node.warn{background:var(--amber-soft);border-color:rgba(180,99,11,.3);color:var(--amber)}
+  .node.risk{background:var(--crimson-soft);border-color:rgba(180,35,60,.3);color:var(--crimson)}
+  .node.human{background:#F1EEFB;border-color:#DBD2F3;color:var(--sentry)}
+  .node.submit{background:#E7F6F4;border-color:#C4E8E3;color:var(--bb)}
+  .spine{width:2px;flex:1;background:var(--line);margin-top:4px;border-radius:2px;min-height:14px}
+  .row.working .node{animation:pulse 1.1s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(14,124,114,.0)}50%{box-shadow:0 0 0 6px rgba(14,124,114,.12)}}
+  .work-dot{display:inline-block;width:14px;height:14px}
+  .work-dot circle{stroke:var(--teal);stroke-width:2.4;fill:none;stroke-linecap:round;
+    stroke-dasharray:30;stroke-dashoffset:8;transform-origin:center;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .rbody{padding-top:6px;min-width:0}
+  .rbody .rt{font-weight:600;font-size:15px;letter-spacing:-.1px}
+  .rbody .rs{font-size:13.5px;color:var(--muted);margin-top:3px;line-height:1.5}
+  .rbody .rs b{color:var(--ink);font-weight:600}
+  .rbody .det{margin-top:8px}
+  .det summary{font-size:12px;color:var(--faint);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:5px;user-select:none}
+  .det summary::-webkit-details-marker{display:none}
+  .det summary:hover{color:var(--teal-ink)}
+  .det .raw{margin-top:8px;padding:11px 13px;background:#FAF8F3;border:1px solid var(--line);border-radius:10px;
+    font-size:12.5px;color:var(--muted);line-height:1.6}
+  .det .raw code{font-family:var(--mono);font-size:11.5px;background:#fff;border:1px solid var(--line-2);border-radius:5px;padding:1px 5px;color:#404a57}
+  .det .meta{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:7px}
+
+  /* ---------- issues ---------- */
+  .issue{border-radius:14px;padding:13px 15px;margin-bottom:11px;border:1px solid var(--line)}
+  .issue:last-child{margin-bottom:0}
+  .issue.risk{background:var(--crimson-soft);border-color:rgba(180,35,60,.25)}
+  .issue.warn{background:var(--amber-soft);border-color:rgba(180,99,11,.25)}
+  .issue.good{background:var(--green-soft);border-color:rgba(12,122,84,.25)}
+  .issue .it{font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px}
+  .issue.risk .it{color:var(--crimson)} .issue.warn .it{color:var(--amber)} .issue.good .it{color:var(--green)}
+  .issue .ir{font-size:13px;color:var(--muted);margin-top:5px;line-height:1.5}
+  .issue .fix{font-size:12.5px;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(0,0,0,.1);color:var(--ink)}
+  .issue .fix b{font-weight:600}
+
+  /* ---------- referral summary ---------- */
+  .kv{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--line)}
+  .kv:last-child{border-bottom:none}
+  .kv .k{color:var(--muted)}
+  .kv .v{font-weight:500;text-align:right;max-width:62%}
+  .kv .v.miss{color:var(--crimson);font-weight:600}
+  .kv .v.miss::before{content:"⚠ ";font-size:11px}
+
+  /* technical trail */
+  .tech{margin-top:20px}
+  .tech > summary{font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;list-style:none;
+    display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--line-2);border-radius:999px;background:#fff}
+  .tech > summary::-webkit-details-marker{display:none}
+  .tech > summary:hover{color:var(--teal-ink);border-color:var(--teal)}
+  .techbox{margin-top:14px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow)}
+  .trow{font-family:var(--mono);font-size:12px;padding:8px 0;border-bottom:1px solid var(--line);display:flex;gap:10px}
+  .trow:last-child{border-bottom:none}
+  .trow .ts{color:var(--faint);flex:0 0 auto}
+  .trow .who{font-weight:500;color:var(--ink)}
+  .ebadge{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:5px;font-family:var(--sans);letter-spacing:.3px;flex:0 0 auto;height:fit-content}
+  .e-claude{background:rgba(194,65,12,.1);color:var(--claude)} .e-sentry{background:rgba(109,40,217,.1);color:var(--sentry)}
+  .e-redis{background:rgba(185,28,28,.09);color:var(--redis)} .e-rule{background:var(--teal-soft);color:var(--teal-ink)}
+  .e-browserbase{background:rgba(13,148,136,.12);color:var(--bb)} .e-orkes{background:rgba(202,138,4,.12);color:var(--orkes)}
+  /* chat */
+  .chatpanel{margin-top:20px}
+  .chatpanel h3 .cdot{color:var(--teal)}
+  .chatlog{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow:auto;padding:2px 2px 8px}
+  .chatempty{color:var(--faint);font-size:13.5px;text-align:center;padding:22px 0}
+  .msg{max-width:78%;padding:11px 14px;border-radius:15px;font-size:14px;line-height:1.55;word-wrap:break-word}
+  .msg.user{align-self:flex-end;background:linear-gradient(150deg,var(--teal),var(--teal-ink));color:#fff;border-bottom-right-radius:5px}
+  .msg.bot{align-self:flex-start;background:#F6F3EC;border:1px solid var(--line);border-bottom-left-radius:5px}
+  .msg.bot b{color:var(--ink);font-weight:600}
+  .msg.typing{color:var(--muted);font-style:italic}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 14px}
+  .chip2{font-family:var(--sans);font-size:12.5px;color:var(--teal-ink);background:var(--teal-soft);border:none;
+    border-radius:999px;padding:7px 14px;cursor:pointer;transition:.15s}
+  .chip2:hover{background:#d7e9e6}
+  .chatbar{display:flex;gap:10px}
+  .chatbar input{flex:1;font-family:var(--sans);font-size:14px;padding:12px 15px;border:1px solid var(--line-2);
+    border-radius:12px;background:#fff;color:var(--ink);outline:none;transition:.15s}
+  .chatbar input:focus{border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+  .chatbar button{font-family:var(--sans);font-weight:600;font-size:14px;color:#fff;background:var(--teal);
+    border:none;border-radius:12px;padding:0 22px;cursor:pointer;transition:.15s}
+  .chatbar button:hover:not(:disabled){background:var(--teal-ink)}
+  .chatbar button:disabled{opacity:.5;cursor:not-allowed}
+  .chathint{font-size:12px;color:var(--faint);margin-top:10px;display:flex;align-items:center;gap:6px}
+
+  /* prior-auth form */
+  .formcta{display:flex;justify-content:center;margin:20px 0 4px}
+  .formtop{display:flex;justify-content:space-between;align-items:center;margin:18px 0 16px;gap:14px;flex-wrap:wrap}
+  .formactions{display:flex;align-items:center;gap:16px}
+  .takecase{font-size:13.5px;color:var(--muted);display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+  .takecase input{accent-color:var(--teal);width:16px;height:16px}
+  .run.small{font-size:14px;padding:11px 20px}
+  .paper{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-lg);padding:40px 44px;max-width:840px;margin:0 auto}
+  .ph{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--ink);padding-bottom:15px;gap:20px}
+  .ph-t{font-family:var(--display);font-size:25px;font-weight:600;letter-spacing:-.4px}
+  .ph-s{font-size:11px;color:var(--teal-ink);font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-top:4px;display:flex;align-items:center;gap:6px}
+  .ph-meta{font-size:11.5px;color:var(--muted);text-align:right;display:flex;flex-direction:column;gap:6px}
+  .ph-meta label{display:flex;align-items:center;gap:7px;justify-content:flex-end}
+  .ph-meta input{width:128px}
+  .fstatus{margin:16px 0 4px;padding:11px 15px;border-radius:10px;font-size:13px;font-weight:600;line-height:1.5}
+  .fstatus.ok{background:var(--green-soft);color:var(--green)}
+  .fstatus.warn{background:var(--amber-soft);color:var(--amber)}
+  .fstatus.risk{background:var(--crimson-soft);color:var(--crimson)}
+  .fsec{margin-top:24px}
+  .fsec h4{font-size:11.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--teal-ink);font-weight:700;margin:0 0 13px;border-bottom:1px solid var(--line);padding-bottom:6px}
+  .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:15px 24px}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field.full{grid-column:1 / -1}
+  .field .lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px;display:flex;justify-content:space-between}
+  .field .lbl .rq{color:var(--crimson)}
+  .field input,.field textarea{font-family:var(--sans);font-size:14px;color:var(--ink);border:1px solid var(--line-2);
+    border-radius:8px;padding:9px 11px;background:#fff;outline:none;transition:.15s;width:100%}
+  .field input:focus,.field textarea:focus{border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+  .field textarea{min-height:104px;resize:vertical;line-height:1.55}
+  .field input.need,.field textarea.need{border-color:var(--crimson);background:#FFF7F8}
+  .checks{display:grid;grid-template-columns:1fr 1fr;gap:9px;font-size:13.5px;color:var(--ink)}
+  .checks label{display:flex;align-items:center;gap:9px;cursor:pointer}
+  .checks input{accent-color:var(--teal);width:15px;height:15px}
+  .sign{display:grid;grid-template-columns:2fr 1fr;gap:24px;margin-top:6px}
+  @media(max-width:680px){.fgrid,.checks,.sign{grid-template-columns:1fr}}
+
+  @media print{
+    header,#intake,#results,footer,.formtop{display:none!important}
+    body::before{display:none}
+    body{background:#fff}
+    .wrap{max-width:none;padding:0;margin:0}
+    #formView{display:block!important}
+    .paper{box-shadow:none;border:none;border-radius:0;padding:0;max-width:none}
+    .field input,.ph-meta input{border:none!important;border-bottom:1px solid #99a!important;border-radius:0!important;box-shadow:none!important;padding:2px 0!important}
+    .field textarea{border:1px solid #bbb!important;padding:6px!important}
+    .field input.need,.field textarea.need{background:transparent!important}
+    .fstatus{border:1px solid #ccc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{margin:14mm}
+  }
+
+  .hidden{display:none!important}
+  .fade-out{animation:fadeOut .35s forwards}@keyframes fadeOut{to{opacity:0;transform:translateY(-6px)}}
+  footer{text-align:center;color:var(--faint);font-size:12.5px;margin-top:48px}
+  footer code{font-family:var(--mono)}
+</style>
+</head>
+<body>
+<header>
+  <div class="hd">
+    <div class="brand">
+      <div class="mark"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M12 2.5l7.5 3v5.2c0 4.8-3.2 8.3-7.5 9.8-4.3-1.5-7.5-5-7.5-9.8V5.5L12 2.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.5 12l2.4 2.4 4.6-4.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div><div class="nm">ReferralGuard</div><div class="tag">Referral &amp; prior-auth pre-flight</div></div>
+    </div>
+    <div class="engines" id="engines"></div>
+    <div class="conn" id="conn"><span class="d"></span><span id="connText">checking…</span></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- INTAKE -->
+  <section id="intake">
+    <div class="hero">
+      <div class="eyebrow">Before you submit</div>
+      <h1>Catch the denial <em>before</em> it happens.</h1>
+      <p>Drop in a referral and ReferralGuard reads it, checks every payer requirement, and tells you in plain language whether it's safe to submit — in seconds.</p>
+    </div>
+
+    <div class="intake">
+      <div class="drop" id="drop">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 14v3.5A2.5 2.5 0 006.5 20h11a2.5 2.5 0 002.5-2.5V14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+        <div class="big">Drop a referral here</div>
+        <div class="small">or <b>click to browse</b> — a referral <b>.json</b> (like the files in <b>/samples</b>) or a plain-text clinical note <b>.txt</b></div>
+        <input type="file" id="file" accept=".json,.txt,application/json,text/plain" class="hidden">
+      </div>
+
+      <details class="whatfile" id="whatfile">
+        <summary>What can I upload here?</summary>
+        <div class="whatbox">
+          <p><b>Option A — a referral file (.json).</b> The structured referral your intake system produces. Same shape as the files in the <code>samples/</code> folder. Fields it reads:</p>
+          <pre>{
+  "patient":   { "name": "...", "dob": "YYYY-MM-DD" },
+  "diagnosis_code": "ICD-10 (e.g. M54.50)",
+  "requested_cpt":  "CPT/HCPCS (e.g. 72148)",
+  "procedure":      "MRI lumbar spine w/o contrast",
+  "insurance": { "payer": "...", "member_id": "AET-7781-2200" },
+  "npi": "referring provider NPI",
+  "raw": "the free-text referral / clinical note"
+}</pre>
+          <p><b>Option B — a clinical note (.txt).</b> Paste/drag the raw referral text; it becomes the note and any fields it can't find get flagged as missing.</p>
+          <p class="tip">Quickest demo: skip upload and pick a <b>sample case</b> below.</p>
+        </div>
+      </details>
+
+      <div class="or">or choose a sample case</div>
+      <div class="cases" id="cases"></div>
+
+      <div class="startbar">
+        <button class="run" id="run" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 4l13 8-13 8V4z" fill="currentColor"/></svg>
+          Run pre-flight check
+        </button>
+        <button class="voicebtn" id="voiceBtn">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0014 0M12 18v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          Speak a referral
+        </button>
+        <label class="speed">Demo speed <input id="speed" type="range" min="120" max="780" value="430"></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="results" class="hidden">
+    <div class="nowcard">
+      <div class="left">
+        <div class="node info" id="nowNode"><span class="work-dot"><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="9"/></svg></span></div>
+        <div><div class="lbl" id="nowLbl">Checking</div><div class="tt" id="nowTitle">—</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:18px">
+        <div class="prog" id="progWrap"><div class="bar"><div class="fill" id="fill"></div></div><div class="num" id="num">0/0</div></div>
+        <button class="reset" id="reset">↺ New check</button>
+      </div>
+    </div>
+
+    <div class="verdict" id="verdict">
+      <div class="vbadge" id="vbadge"></div>
+      <div class="vmain">
+        <div class="lbl">Verdict</div>
+        <h2 id="vtitle">—</h2>
+        <div class="say" id="vsay"></div>
+        <div class="conf hidden" id="vconf"></div>
+      </div>
+    </div>
+
+    <div class="formcta hidden" id="formCta">
+      <button class="run" id="prepBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 4h8l3 3v13H5V4h3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12h6M9 16h6M9 8h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Take this case → prepare prior-auth form
+      </button>
+    </div>
+
+    <div class="cols">
+      <div>
+        <div class="tcard hidden" id="transcriptCard">
+          <div class="th">
+            <span class="mic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M5 11a7 7 0 0014 0M12 18v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+            Spoken referral <span class="tpill" id="transcriptEngine"></span>
+          </div>
+          <div class="tbody" id="transcriptText"></div>
+        </div>
+        <div class="panel">
+          <h3>Live pre-flight <span class="c" id="caseName"></span></h3>
+          <div class="tl" id="tl"></div>
+        </div>
+
+        <details class="tech" id="tech">
+          <summary>⌗ Technical audit trail — timestamped, replayable</summary>
+          <div class="techbox" id="techbox"></div>
+        </details>
+      </div>
+
+      <div>
+        <div class="panel" id="issuesPanel" style="margin-bottom:20px">
+          <h3>What needs attention</h3>
+          <div id="issues"></div>
+        </div>
+        <div class="panel">
+          <h3>Referral summary</h3>
+          <div id="summary"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel chatpanel hidden" id="chatPanel">
+      <h3><span class="cdot"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 5h16v11H8l-4 4V5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span> Ask about this case <span class="c">answers come only from this referral — no made-up facts</span></h3>
+      <div class="chatlog" id="chatlog"></div>
+      <div class="chips" id="chatChips"></div>
+      <div class="chatbar">
+        <input id="chatInput" placeholder="e.g. Why might this be denied? What should I do next?" autocomplete="off">
+        <button id="chatSend">Send</button>
+      </div>
+      <div class="chathint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 2.6v5C19 15 16 18.4 12 20c-4-1.6-7-5-7-9.4v-5L12 3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg> Grounded in the case context above — if it's not in the referral, the assistant says so.</div>
+    </div>
+  </section>
+
+  <!-- PRIOR-AUTH FORM -->
+  <section id="formView" class="hidden">
+    <div class="formtop">
+      <button class="reset" id="formBack">← Back to results</button>
+      <div class="formactions">
+        <label class="takecase"><input type="checkbox" id="takeCase"> I'll take this case</label>
+        <button class="run small" id="downloadPdf">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 4v10m0 0l-3.5-3.5M12 14l3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          Download / Print PDF
+        </button>
+      </div>
+    </div>
+
+    <div class="paper" id="paper">
+      <div class="ph">
+        <div>
+          <div class="ph-t">Prior Authorization Request</div>
+          <div class="ph-s"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3l7 2.6v5C19 15 16 18.4 12 20c-4-1.6-7-5-7-9.4v-5L12 3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Pre-flight verified by ReferralGuard</div>
+        </div>
+        <div class="ph-meta">
+          <label>Date <input id="f_date"></label>
+          <label>Request ID <input id="f_reqid"></label>
+        </div>
+      </div>
+
+      <div class="fstatus" id="f_status"></div>
+
+      <div class="fsec">
+        <h4>Patient</h4>
+        <div class="fgrid">
+          <div class="field"><span class="lbl">Patient name <span class="rq" data-for="f_pname"></span></span><input id="f_pname"></div>
+          <div class="field"><span class="lbl">Date of birth <span class="rq" data-for="f_dob"></span></span><input id="f_dob" placeholder="YYYY-MM-DD"></div>
+          <div class="field"><span class="lbl">Medical record # (MRN)</span><input id="f_mrn"></div>
+          <div class="field"><span class="lbl">Sex</span><input id="f_sex"></div>
+        </div>
+      </div>
+
+      <div class="fsec">
+        <h4>Insurance</h4>
+        <div class="fgrid">
+          <div class="field"><span class="lbl">Payer <span class="rq" data-for="f_payer"></span></span><input id="f_payer"></div>
+          <div class="field"><span class="lbl">Member ID <span class="rq" data-for="f_member"></span></span><input id="f_member"></div>
+          <div class="field"><span class="lbl">Group #</span><input id="f_group"></div>
+          <div class="field"><span class="lbl">Plan type</span><input id="f_plan"></div>
+        </div>
+      </div>
+
+      <div class="fsec">
+        <h4>Requesting provider</h4>
+        <div class="fgrid">
+          <div class="field"><span class="lbl">Clinic / facility</span><input id="f_clinic"></div>
+          <div class="field"><span class="lbl">Referring NPI <span class="rq" data-for="f_npi"></span></span><input id="f_npi"></div>
+          <div class="field"><span class="lbl">Provider name</span><input id="f_provname"></div>
+          <div class="field"><span class="lbl">Phone / fax</span><input id="f_phone"></div>
+        </div>
+      </div>
+
+      <div class="fsec">
+        <h4>Service requested</h4>
+        <div class="fgrid">
+          <div class="field full"><span class="lbl">Procedure / service <span class="rq" data-for="f_proc"></span></span><input id="f_proc"></div>
+          <div class="field"><span class="lbl">CPT / HCPCS <span class="rq" data-for="f_cpt"></span></span><input id="f_cpt"></div>
+          <div class="field"><span class="lbl">Diagnosis (ICD-10) <span class="rq" data-for="f_icd"></span></span><input id="f_icd"></div>
+          <div class="field"><span class="lbl">Place of service</span><input id="f_pos"></div>
+          <div class="field"><span class="lbl">Requested date of service</span><input id="f_reqdate"></div>
+        </div>
+      </div>
+
+      <div class="fsec">
+        <h4>Clinical justification / medical necessity</h4>
+        <div class="field full"><textarea id="f_justify"></textarea></div>
+      </div>
+
+      <div class="fsec">
+        <h4>Supporting documentation attached</h4>
+        <div class="checks">
+          <label><input type="checkbox" id="c_chart"> Chart / progress notes</label>
+          <label><input type="checkbox" id="c_conserv"> Conservative / step-therapy history</label>
+          <label><input type="checkbox" id="c_labs"> Relevant labs</label>
+          <label><input type="checkbox" id="c_imaging"> Prior imaging / reports</label>
+        </div>
+      </div>
+
+      <div class="fsec">
+        <h4>Authorization</h4>
+        <div class="sign">
+          <div class="field"><span class="lbl">Provider signature</span><input id="f_sign"></div>
+          <div class="field"><span class="lbl">Date</span><input id="f_signdate"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Pre-flight checks: completeness · insurance-ID validity · payer denial-risk · human sign-off · auto-submission.
+    Built with Claude, Redis, Sentry, Deepgram, Phoenix, Browserbase &amp; Orkes.
+  </footer>
+</div>
+
+<script>
+/* ============ sample cases (mirror the referral schema the backend expects) ============ */
+const SAMPLES = [
+  {id:"REF-2026-0612-001",title:"Cardiology + stress echo",clinic:"Bayview Family Medicine",chan:"fax_ocr",tag:"ok",tagText:"Looks complete",
+   patient:{name:"Maria Gonzalez",dob:"1969-04-18",mrn:"BV-88231"},diagnosis_code:"I20.0",requested_cpt:"93350",procedure:"Cardiology consult + stress echo",
+   insurance:{payer:"BlueShield PPO",member_id:"BSC-4471-9920",group:"88123"},npi:"1295847362",
+   raw:"Exertional chest pain x3wks. Troponin neg. Conservative tx (nitrates, ASA) started 5/30. EKG + lipid panel attached."},
+  {id:"REF-2026-0612-002",title:"Diagnostic colonoscopy",clinic:"Northgate Urgent Care",chan:"phone_intake",tag:"warn",tagText:"Missing fields",
+   patient:{name:"James O'Neill",dob:"1981-11-02",mrn:null},diagnosis_code:null,requested_cpt:"45378",procedure:"Diagnostic colonoscopy",
+   insurance:{payer:"Aetna",member_id:"AET-7781-2200",group:null},npi:null,
+   raw:"Phone referral. Rectal bleeding, family hx colon cancer. No ICD-10 stated by referring office."},
+  {id:"REF-2026-0612-003",title:"Humira (biologic) PA",clinic:"Summit Rheumatology",chan:"ehr_direct",tag:"risk",tagText:"Denial risk",
+   patient:{name:"Dana Whitfield",dob:"1990-07-22",mrn:"SR-2041"},diagnosis_code:"M06.9",requested_cpt:"J0135",procedure:"Adalimumab (Humira) biologic",
+   insurance:{payer:"UnitedHealthcare",member_id:"UHC-3398-1180",group:"RX-552"},npi:"1487720013",
+   raw:"RA dx. Requesting Humira. No documentation of methotrexate trial in note."},
+  {id:"REF-2026-0612-004",title:"MRI right knee PA",clinic:"Riverside Orthopedics",chan:"fax_ocr",tag:"warn",tagText:"Corrupt field",
+   patient:{name:"Kevin Tran",dob:"1977-03-14",mrn:"RO-5567"},diagnosis_code:"M23.205",requested_cpt:"73721",procedure:"MRI right knee w/o contrast",
+   insurance:{payer:"Cigna",member_id:"##-OCR-ERR-##",group:"CIG-7781"},npi:"1730028841",
+   raw:"Six weeks PT documented. Member ID illegible on fax (OCR error)."},
+  {id:"REF-2026-0612-005",title:"Lumbar MRI PA",clinic:"Lakeside Spine & Pain",chan:"phone_intake",tag:"risk",tagText:"Denial risk",
+   patient:{name:"Patricia Lowe",dob:"1962-09-30",mrn:"LS-1190"},diagnosis_code:"M54.50",requested_cpt:"72148",procedure:"MRI lumbar spine w/o contrast",
+   insurance:{payer:"Humana Medicare Advantage",member_id:"HUM-9921-3304",group:"MA-22"},npi:"1902847711",
+   raw:"Acute LBP, onset 10 days. No red-flag neuro symptoms. No documented conservative therapy."}
+];
+
+/* ============ offline pipeline (used if backend not running) ============ */
+const PAYER_RULES={
+  "J0135":{name:"Adalimumab (Humira)",need:"step therapy",keywords:["methotrexate","mtx","dmard"],
+    msg:"Payer policy requires a documented trial/failure of a conventional DMARD (e.g., methotrexate) before approving a biologic."},
+  "72148":{name:"Lumbar MRI",need:"conservative therapy",keywords:["conservative therapy","physical therapy","weeks pt","red-flag","red flag"],
+    msg:"Imaging guidelines require 4–6 weeks of conservative therapy OR documented red-flag symptoms for acute low back pain."},
+  "73721":{name:"Knee MRI",need:"conservative therapy",keywords:["physical therapy","weeks pt","conservative"],
+    msg:"Payer expects a trial of conservative management (e.g., 6 weeks PT) before advanced knee imaging."}
+};
+const NEGATIONS=["no ","not ","without","absent","denies","negative for","lacks","missing","none"];
+function requirementMet(hay,ks){for(const k of ks){let i=hay.indexOf(k);while(i!==-1){const w=hay.slice(Math.max(0,i-28),i);if(!NEGATIONS.some(n=>w.includes(n)))return true;i=hay.indexOf(k,i+1);}}return false;}
+const REQUIRED=[["patient.name","Patient name"],["patient.dob","Date of birth"],["diagnosis_code","ICD-10 diagnosis code"],["requested_cpt","Requested CPT/HCPCS"],["insurance.payer","Payer"],["insurance.member_id","Member ID"],["npi","Referring provider NPI"]];
+const MEMBER_ID_RE=/^[A-Z]{2,4}-\d{4}-\d{4}$/;
+const get=(o,p)=>p.split('.').reduce((x,k)=>x&&x[k],o);
+function runPipeline(s){
+  const steps=[];let t=0;const session="sess:"+s.id.slice(-3)+":"+Math.random().toString(36).slice(2,7);
+  const push=o=>{t+=40+Math.floor(Math.random()*90);steps.push({...o,ms:t});};const flags=[];
+  push({who:"Intake Agent",badge:"redis",act:"Request received — session opened",det:`Channel <code>${s.chan}</code> · clinic “${s.clinic}”. Raw payload cached to <code>${session}</code> (TTL 1h). State → <code>RECEIVED</code>.`});
+  push({who:"Extraction Agent",badge:"claude",act:"Structured fields extracted from raw text",det:`Parsed via Claude: patient=<code>${s.patient.name}</code> · dx=<code>${s.diagnosis_code||'∅ not found'}</code> · cpt=<code>${s.requested_cpt}</code> · payer=<code>${s.insurance.payer}</code>`});
+  const missing=REQUIRED.filter(([p])=>{const v=get(s,p);return v===null||v===undefined||v==='';});
+  push({who:"Completeness Agent",badge:"rule",act:`Required-field check: ${REQUIRED.length-missing.length}/${REQUIRED.length} present`,det:missing.length?`Missing → ${missing.map(m=>'<code>'+m[1]+'</code>').join(', ')}.`:`All required fields present. No intake gaps.`});
+  missing.forEach(m=>flags.push({sev:"warn",ttl:"Missing: "+m[1],rsn:"Payer will reject or pend a submission without this field."}));
+  push({who:"Validation Agent",badge:"redis",act:"Member ID format validation",det:`Checking <code>${s.insurance.member_id}</code> against payer ID pattern…`});
+  if(!MEMBER_ID_RE.test(s.insurance.member_id||"")){
+    const ev="evt_"+Math.random().toString(36).slice(2,12);
+    push({who:"Sentry",badge:"sentry",act:"Exception captured — pipeline did NOT crash",det:`<code>MemberIdFormatError</code> raised while normalizing insurance ID. Captured to Sentry as <code>${ev}</code> with breadcrumbs [intake→extract→validate]. Agent recovered → routed to human review.`});
+    flags.push({sev:"warn",ttl:"Unreadable member ID",rsn:"Intake produced an invalid member ID. Exception logged to Sentry; flagged for correction before submit."});
+  }else push({who:"Validation Agent",badge:"redis",act:"Member ID OK",det:`Format valid. State → <code>VALIDATED</code>.`});
+  const rule=PAYER_RULES[s.requested_cpt];
+  push({who:"Denial-Risk Agent",badge:"claude",act:`Payer-policy reasoning for ${s.insurance.payer}`,det:rule?`Procedure ${rule.name} (CPT ${s.requested_cpt}) has a known <b>${rule.need}</b> requirement. Scanning clinical note…`:`CPT ${s.requested_cpt}: no high-risk utilization rule on file. Checking baseline medical-necessity language…`});
+  if(rule){const hay=(s.raw+" "+s.procedure).toLowerCase();
+    if(!requirementMet(hay,rule.keywords)){push({who:"Denial-Risk Agent",badge:"claude",act:`HIGH denial risk — ${rule.need} not documented`,det:`${rule.msg} No supporting evidence found. Predicted outcome: <b>denial / pend</b> if submitted as-is.`});flags.push({sev:"risk",ttl:`Likely denial: ${rule.need} not documented`,rsn:rule.msg});}
+    else push({who:"Denial-Risk Agent",badge:"claude",act:`${rule.need} requirement satisfied`,det:`Found supporting evidence in note. Requirement met.`});}
+  const hasRisk=flags.some(f=>f.sev==="risk"),hasWarn=flags.some(f=>f.sev==="warn");
+  let verdict,vclass,vsub;
+  if(hasRisk){verdict="HIGH DENIAL RISK";vclass="risk";vsub="Fix the flagged gap before submitting — high probability of denial.";}
+  else if(hasWarn){verdict="NEEDS INFO";vclass="warn";vsub="Return to referring clinic for the missing or invalid fields.";}
+  else{verdict="READY TO SUBMIT";vclass="ok";vsub="All checks passed. Safe to submit to the payer.";}
+  push({who:"Decision Agent",badge:"rule",act:`Final verdict: ${verdict}`,det:`Derived from ${flags.length} flag(s). Full trace persisted to <code>${session}:audit</code> for replay.`});
+  let submission=null;
+  if(vclass==='ok'){
+    push({who:"Approval Gate",badge:"orkes",act:"Human-in-the-loop approval — required for prior auth",det:`Conductor <code>HUMAN</code> task created and signed off by <code>ops@clinic</code>. Workflow resumes.`});
+    const conf="PA-"+Math.random().toString(36).slice(2,10).toUpperCase();
+    push({who:"Submission Agent",badge:"browserbase",act:`Opened hosted browser → ${s.insurance.payer} portal`,det:`Browserbase headless Chrome auto-fills member ID, CPT <code>${s.requested_cpt}</code>, dx <code>${s.diagnosis_code}</code>, NPI <code>${s.npi}</code>…`});
+    push({who:"Submission Agent",badge:"browserbase",act:`Submitted — confirmation ${conf}`,det:`Form submitted. Payer status: <code>RECEIVED / PENDING REVIEW</code>.`});
+    submission={confirmation:conf,status:"RECEIVED"};
+  }else push({who:"Routing Agent",badge:"rule",act:"Routed to human review queue",det:`Not eligible for auto-submission. Returned to the referring clinic with the flagged reasons attached.`});
+  return {steps,flags,verdict,vclass,vsub,session,missing:missing.map(m=>[m[0],m[1]]),submission};
+}
+
+/* ============ plain-English translation layer ============ */
+const ICON={
+  inbox:'<path d="M3 13h4l1.5 2.5h7L17 13h4M5 5h14l2 8v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4L5 5z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" fill="none"/>',
+  ai:'<path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" fill="currentColor"/><circle cx="18" cy="17" r="1.4" fill="currentColor"/><circle cx="6.5" cy="16.5" r="1" fill="currentColor"/>',
+  check:'<path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  list:'<path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 6l1 1 1.6-2M4 12l1 1 1.6-2M4 18l1 1 1.6-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  shield:'<path d="M12 3l7 2.6v5C19 15 16 18.4 12 20c-4-1.6-7-5-7-9.4v-5L12 3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" fill="none"/><path d="M9 12l2 2 4-4.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  alert:'<path d="M12 4l9 16H3L12 4z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" fill="none"/><path d="M12 10v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17" r="1" fill="currentColor"/>',
+  scale:'<path d="M12 4v16M6 20h12M12 6l-6 2 6-2 6 2-6-2zM3 14l3-6 3 6a3 3 0 01-6 0zM15 14l3-6 3 6a3 3 0 01-6 0z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  flag:'<path d="M6 21V4M6 4h11l-2 3.5L17 11H6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+  user:'<circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M5.5 20a6.5 6.5 0 0113 0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/>',
+  globe:'<circle cx="12" cy="12" r="8.4" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M3.6 12h16.8M12 3.6c2.4 2.3 2.4 14.5 0 16.8M12 3.6c-2.4 2.3-2.4 14.5 0 16.8" stroke="currentColor" stroke-width="1.4" fill="none"/>',
+  back:'<path d="M9 7l-4 4 4 4M5 11h9a5 5 0 010 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+};
+function svg(name){return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none">${ICON[name]}</svg>`;}
+
+// translate a raw pipeline step -> {title, sub, tone, icon}
+function friendly(st){
+  const who=st.who, a=(st.act||"").toLowerCase(), payer=(window._payer||"the insurer");
+  if(who==="Intake Agent") return {title:"Referral received",sub:"Logged your incoming request and saved a secure copy.",tone:"info",icon:"inbox"};
+  if(who==="Extraction Agent") return {title:"Reading the referral",sub:"<b>Claude AI</b> read the note and pulled out the patient, diagnosis, procedure and insurance.",tone:"ai",icon:"ai"};
+  if(who==="Completeness Agent"){const m=st.act.match(/(\d+)\/(\d+)/);const cnt=m?`<b>${m[1]} of ${m[2]}</b> required fields present.`:"Checking required fields.";return {title:"Checking required fields",sub:cnt+" These are the fields a payer needs to even process a request.",tone:a.includes("all required")?"check":"warn",icon:"list"};}
+  if(who==="Validation Agent"){
+    if(a.includes("ok")) return {title:"Insurance ID verified",sub:"The member ID is valid and readable.",tone:"check",icon:"shield"};
+    return {title:"Verifying the insurance ID",sub:"Checking the member ID against the payer's expected format.",tone:"info",icon:"shield"};
+  }
+  if(who==="Sentry") return {title:"Caught a data problem — safely",sub:"An unreadable field was logged and the check kept going instead of crashing. Flagged for a human to correct.",tone:"warn",icon:"alert"};
+  if(who==="Denial-Risk Agent"){
+    if(a.includes("high denial")) return {title:"Found a likely denial reason",sub:"This payer requires documentation that isn't in the note — it would likely be denied as-is.",tone:"risk",icon:"scale"};
+    if(a.includes("satisfied")) return {title:"Insurer's requirement met",sub:"The note contains the evidence this payer requires.",tone:"check",icon:"scale"};
+    return {title:"Checking the insurer's rules",sub:`Comparing this procedure against <b>${payer}</b>'s approval policy.`,tone:"info",icon:"scale"};
+  }
+  if(who==="Decision Agent") return {title:"Decision reached",sub:"Combined every check into a single recommendation.",tone:"info",icon:"flag"};
+  if(who==="Approval Gate") return {title:"Human sign-off",sub:"A person approved before anything was sent — required for prior authorization.",tone:"human",icon:"user"};
+  if(who==="Submission Agent"){
+    if(a.includes("submitted")) return {title:"Submitted to the insurer",sub:"Sent successfully through the payer's portal.",tone:"submit",icon:"globe"};
+    return {title:"Filling the insurer's online form",sub:`A secure browser logged into <b>${payer}</b>'s portal and entered the details automatically.`,tone:"submit",icon:"globe"};
+  }
+  if(who==="Routing Agent") return {title:"Sent back to your office",sub:"Returned with the issues to fix before resubmitting.",tone:"warn",icon:"back"};
+  return {title:st.act||who,sub:"",tone:"info",icon:"check"};
+}
+
+const VERDICT={
+  ok:{label:"Ready to submit",say:"Everything checks out. We've sent this to the payer for you — no action needed.",icon:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'},
+  warn:{label:"Needs more info",say:"Almost there — add the missing details on the right, then run the check again.",icon:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 7v6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="17" r="1.3" fill="currentColor"/></svg>'},
+  risk:{label:"Likely to be denied",say:"Don't submit yet. Fixing the issue on the right avoids an almost-certain denial.",icon:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 4l9 16H3L12 4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.1" fill="currentColor"/></svg>'}
+};
+function fixHint(f){
+  if(f.ttl.startsWith("Missing:")) return "Ask the referring office to add this field, then resubmit.";
+  if(/member id/i.test(f.ttl)) return "Re-enter the member ID from the patient's insurance card.";
+  if(f.ttl.startsWith("Likely denial")) return "Attach the required documentation (e.g., conservative-therapy or step-therapy history) before submitting.";
+  return "Resolve this before sending to the payer.";
+}
+
+/* ============ wiring ============ */
+const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const fmtTs=ms=>new Date(1750000000000+ms).toISOString().slice(11,23);
+const SPIN='<span class="work-dot"><svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="9"/></svg></span>';
+let selected=null, running=false, backendUrl=null, uploaded=null;
+
+// build sample cards
+const casesEl=$('cases');
+SAMPLES.forEach((s,i)=>{
+  const b=document.createElement('button');b.className='case';b.dataset.i=i;
+  b.innerHTML=`<div class="ct">${s.title}</div><div class="cc">${s.clinic}</div>
+    <span class="pill ${s.tag}"><span class="pd"></span>${s.tagText}</span>`;
+  b.onclick=()=>selectCase(i,b);
+  casesEl.appendChild(b);
+});
+function selectCase(i,el){
+  if(running)return;
+  uploaded=null;selected=i;
+  document.querySelectorAll('.case').forEach(x=>x.classList.remove('sel'));
+  if(el)el.classList.add('sel'); else document.querySelector(`.case[data-i="${i}"]`)?.classList.add('sel');
+  $('run').disabled=false;
+}
+
+// file upload
+const drop=$('drop'),fileInput=$('file');
+drop.onclick=()=>fileInput.click();
+['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',ev=>{const f=ev.dataTransfer.files[0];if(f)handleFile(f);});
+fileInput.onchange=()=>{if(fileInput.files[0])handleFile(fileInput.files[0]);};
+function handleFile(f){
+  const r=new FileReader();
+  r.onload=()=>{
+    let req=null;
+    try{
+      const j=JSON.parse(r.result);
+      // accept either a single referral or {request:{...}}
+      req=j.request||j;
+      if(!req.id) req.id="REF-UPLOAD-"+Math.random().toString(36).slice(2,7).toUpperCase();
+    }catch(e){
+      // plain-text note -> wrap into a minimal request; fields come from the note
+      req={id:"REF-UPLOAD-"+Math.random().toString(36).slice(2,7).toUpperCase(),title:f.name,
+        clinic:"Uploaded document",chan:"file_upload",
+        patient:{name:null,dob:null,mrn:null},diagnosis_code:null,requested_cpt:null,procedure:"(from uploaded note)",
+        insurance:{payer:null,member_id:null,group:null},npi:null,raw:String(r.result).slice(0,4000)};
+    }
+    req.title=req.title||f.name; req.clinic=req.clinic||"Uploaded document"; req.chan=req.chan||"file_upload";
+    uploaded=req; selected=null;
+    document.querySelectorAll('.case').forEach(x=>x.classList.remove('sel'));
+    drop.querySelector('.big').textContent="Loaded: "+f.name;
+    drop.querySelector('.small').innerHTML="ready to check · <b>click to choose another</b>";
+    $('run').disabled=false;
+  };
+  r.readAsText(f);
+}
+
+$('run').onclick=start;
+$('voiceBtn').onclick=voiceStart;
+$('reset').onclick=()=>location.reload();
+$('chatSend').onclick=sendChat;
+$('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+$('prepBtn').onclick=openForm;
+$('formBack').onclick=()=>{$('formView').classList.add('hidden');$('results').classList.remove('hidden');window.scrollTo({top:0});};
+$('downloadPdf').onclick=()=>window.print();
+document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.contains('need')&&e.target.value.trim())e.target.classList.remove('need');});
+
+// ---- shared run helpers ----
+function showResultsView(title){
+  $('intake').classList.add('hidden');
+  $('results').classList.remove('hidden');
+  $('caseName').textContent="· "+title;
+  $('tl').innerHTML='';$('issues').innerHTML='';$('summary').innerHTML='';
+  $('transcriptCard').classList.add('hidden');$('transcriptText').textContent='';
+  $('chatPanel').classList.add('hidden');$('chatlog').innerHTML='';
+  $('formCta').classList.add('hidden');$('formView').classList.add('hidden');
+  $('verdict').classList.remove('show','ok','warn','risk');
+  $('fill').style.width='0%';
+  window.scrollTo({top:0});
+}
+async function streamSteps(steps, speed, holdP){
+  const N=steps.length;$('num').textContent="0/"+N;
+  for(let i=0;i<N;i++){
+    const st=steps[i],f=friendly(st),last=i===N-1;
+    $('nowLbl').textContent="Now checking";$('nowTitle').textContent=f.title;
+    $('nowNode').className="node "+f.tone;$('nowNode').innerHTML=SPIN;
+    const row=document.createElement('div');row.className='row working';
+    row.innerHTML=`<div class="rail"><div class="node ${f.tone}">${SPIN}</div>${last?'':'<div class="spine"></div>'}</div>
+      <div class="rbody"><div class="rt">${f.title}</div><div class="rs">${f.sub}</div>
+        <div class="det"><details><summary>▸ details</summary><div class="raw">${st.det}<div class="meta">${st.who} · engine: ${st.badge} · t+${fmtTs(st.ms)}</div></div></details></div>
+      </div>`;
+    $('tl').appendChild(row);
+    window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});
+    // submission step = real browser automation — hold the spinner here until the backend finishes
+    const isSubmit = st.who==="Submission Agent" && /open|portal|browser/i.test(st.act);
+    if(isSubmit && holdP){ $('nowLbl').textContent="Working with the insurer…"; await holdP; }
+    await sleep(speed);
+    row.classList.remove('working');
+    row.querySelector('.node').innerHTML=svg(f.icon);
+    $('fill').style.width=((i+1)/N*100)+"%";$('num').textContent=(i+1)+"/"+N;
+  }
+}
+function finishWith(result){
+  $('nowLbl').textContent="Complete";$('nowTitle').textContent="Pre-flight finished";
+  $('nowNode').className="node check";$('nowNode').innerHTML=svg('check');
+  renderVerdict(result);renderIssues(result);renderTech(result);
+  lastResult=result; lastReq=result._req||result.request||{};
+  setupChat(lastReq, result);
+  $('formCta').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+  running=false;
+}
+
+/* ============ prior-auth form (auto-fill + PDF) ============ */
+let lastReq=null, lastResult=null;
+const MEMBER_RE=/^[A-Z]{2,4}-\d{4}-\d{4}$/;
+function todayStr(){return new Date().toISOString().slice(0,10);}
+function vof(x){return (x===null||x===undefined)?'':x;}
+function setF(id,v,required){
+  const el=$(id);if(!el)return;el.value=vof(v);
+  const rq=document.querySelector('.rq[data-for="'+id+'"]');
+  if(required){if(rq)rq.textContent='*'; el.classList.toggle('need', !el.value.trim());}
+}
+function buildJustify(r,result){
+  let j=r.raw?String(r.raw).trim():'';
+  const risk=(result.flags||[]).filter(f=>f.sev==='risk');
+  if(risk.length) j+=(j?'\n\n':'')+'Documentation to attach for medical necessity:\n'+risk.map(f=>'- '+f.rsn).join('\n');
+  return j;
+}
+function openForm(){
+  if(!lastResult)return;
+  const r=lastReq||{}, pat=r.patient||{}, ins=r.insurance||{};
+  $('results').classList.add('hidden');$('intake').classList.add('hidden');
+  $('formView').classList.remove('hidden');
+  setF('f_date',todayStr());setF('f_reqid',r.id||'');
+  setF('f_pname',pat.name,1);setF('f_dob',pat.dob,1);setF('f_mrn',pat.mrn);setF('f_sex','');
+  setF('f_payer',ins.payer,1);
+  setF('f_member',MEMBER_RE.test(ins.member_id||'')?ins.member_id:'',1);   // blank if illegible/invalid → doctor fills
+  setF('f_group',ins.group);setF('f_plan','');
+  setF('f_clinic',r.clinic);setF('f_npi',r.npi,1);setF('f_provname','');setF('f_phone','');
+  setF('f_proc',r.procedure,1);setF('f_cpt',r.requested_cpt,1);setF('f_icd',r.diagnosis_code,1);
+  setF('f_pos','Office (POS 11)');setF('f_reqdate','');
+  $('f_justify').value=buildJustify(r,lastResult);
+  $('f_justify').classList.toggle('need', !$('f_justify').value.trim());
+  const v=lastResult.verdict||'';
+  const vc=lastResult.vclass||(/DENIAL/.test(v)?'risk':/INFO/.test(v)?'warn':'ok');
+  const s=$('f_status');s.className='fstatus '+vc;
+  s.textContent = vc==='ok'
+    ? '✓ Pre-flight passed — all required fields present, no payer-rule conflicts. Ready to submit.'
+    : vc==='warn'
+    ? '⚠ Pre-flight: some required fields were missing or unreadable — complete the highlighted fields before submitting.'
+    : '⛔ Pre-flight: high denial risk — attach the documentation noted in the justification before submitting.';
+  window.scrollTo({top:0});
+}
+
+/* ============ case chat (grounded Q&A) ============ */
+let chatContext=null, chatHistory=[], chatBusy=false;
+const SUGGEST=["Why might this be denied?","What's missing?","What should I do next?","Is this ready to submit?"];
+function setupChat(req,result){
+  chatContext={
+    request:req,
+    verdict:result.verdict,
+    flags:result.flags||[],
+    missing:result.missing||[],
+    steps:(result.steps||[]).map(s=>({who:s.who,act:s.act})),
+    transcript:result.transcript||null
+  };
+  chatHistory=[];
+  $('chatPanel').classList.remove('hidden');
+  $('chatlog').innerHTML='<div class="chatempty">Ask anything about this referral — the assistant answers only from the case data above.</div>';
+  $('chatChips').innerHTML=SUGGEST.map(q=>`<button class="chip2">${q}</button>`).join('');
+  $('chatChips').querySelectorAll('.chip2').forEach(b=>b.onclick=()=>{$('chatInput').value=b.textContent;sendChat();});
+}
+function fmtMsg(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');}
+function addMsg(role,text){
+  const log=$('chatlog');const e0=log.querySelector('.chatempty');if(e0)e0.remove();
+  const d=document.createElement('div');d.className='msg '+role;d.innerHTML=fmtMsg(text);
+  log.appendChild(d);log.scrollTop=log.scrollHeight;return d;
+}
+function localChat(){
+  if(!chatContext)return "Run a case first.";
+  const f=chatContext.flags||[];const base=`This referral is **${chatContext.verdict}**.`;
+  if(!f.length)return base+" All checks passed — no issues found.";
+  return base+" Issues found:\n"+f.map(x=>`• ${x.ttl} — ${x.rsn}`).join("\n")+"\n\n(Live backend gives full conversational answers.)";
+}
+async function sendChat(){
+  if(chatBusy||!chatContext)return;
+  const inp=$('chatInput');const q=inp.value.trim();if(!q)return;
+  inp.value='';addMsg('user',q);chatHistory.push({role:'user',content:q});
+  chatBusy=true;$('chatSend').disabled=true;
+  const typing=addMsg('bot','thinking…');typing.classList.add('typing');
+  let reply=null;
+  if(backendUrl){
+    try{
+      const r=await fetch(backendUrl+"/chat",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({context:chatContext,messages:chatHistory}),signal:AbortSignal.timeout(60000)});
+      reply=(await r.json()).reply;
+    }catch(e){reply=null;}
+  }
+  if(!reply)reply=localChat();
+  typing.remove();
+  addMsg('bot',reply);chatHistory.push({role:'assistant',content:reply});
+  chatBusy=false;$('chatSend').disabled=false;inp.focus();
+}
+
+async function start(){
+  if(running)return;
+  const req = uploaded || SAMPLES[selected];
+  if(!req)return;
+  running=true;$('run').disabled=true;$('voiceBtn').disabled=true;window._payer=req.insurance?.payer||"the insurer";
+
+  // Fire the REAL backend run immediately — animation does NOT wait on it.
+  const backendP = backendUrl
+    ? fetch(backendUrl+"/process",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(req),signal:AbortSignal.timeout(120000)})
+        .then(r=>r.json()).catch(()=>null)
+    : Promise.resolve(null);
+  const local = runPipeline(req);   // local mirror streams instantly
+
+  showResultsView(req.title||req.id);
+  renderSummary(req, local);
+  await streamSteps(local.steps, +$('speed').value, backendUrl?backendP:null);
+
+  const real = await backendP;
+  const result = (real && real.steps) ? real : (local._offline=true, local);
+  result._req = req;
+  finishWith(result);
+}
+
+async function voiceStart(){
+  if(running)return;
+  running=true;$('run').disabled=true;$('voiceBtn').disabled=true;
+
+  showResultsView("Spoken phone referral");
+  $('nowLbl').textContent="Listening";
+  $('nowTitle').textContent="Transcribing the call with Deepgram…";
+  $('nowNode').className="node ai";$('nowNode').innerHTML=SPIN;
+
+  let result=null;
+  if(backendUrl){
+    try{result=await fetch(backendUrl+"/intake/voice",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}",signal:AbortSignal.timeout(120000)}).then(r=>r.json());}catch(e){result=null;}
+  }
+  if(!result||!result.steps){   // offline fallback: baked transcript + colonoscopy scenario
+    const meta={id:"REF-VOICE-001",title:"Spoken phone referral",clinic:"Northgate Urgent Care",chan:"deepgram_voice",
+      patient:{name:"James O'Neill",dob:"1981-11-02",mrn:null},diagnosis_code:null,requested_cpt:"45378",procedure:"Diagnostic colonoscopy",
+      insurance:{payer:"Aetna",member_id:"AET-7781-2200",group:null},npi:null,
+      raw:"Hi, calling from Northgate Urgent Care to refer James O'Neill, DOB November 2nd 1981, for a diagnostic colonoscopy. Rectal bleeding, family history of colon cancer. Insurance is Aetna. I don't have the ICD-10 code in front of me."};
+    result=runPipeline(meta);result._offline=true;
+    result.transcript={text:meta.raw,engine:"mock"};result.request=meta;
+  }
+  window._payer=result.request?.insurance?.payer||"Aetna";
+
+  // transcript card
+  const eng=(result.transcript&&result.transcript.engine)||"mock";
+  $('transcriptCard').classList.remove('hidden');
+  $('transcriptEngine').textContent=eng==="deepgram"?"Deepgram · live":"sample transcript";
+  $('transcriptEngine').className="tpill"+(eng==="deepgram"?" live":"");
+  $('transcriptText').textContent=(result.transcript&&result.transcript.text)||"";
+
+  renderSummary(result.request||{patient:{},insurance:{}}, result);
+  await streamSteps(result.steps, +$('speed').value, null);
+  finishWith(result);
+}
+
+function renderVerdict(r){
+  const v=VERDICT[r.vclass]||VERDICT.warn;
+  const el=$('verdict');el.className="verdict "+r.vclass;
+  $('vbadge').innerHTML=v.icon;
+  $('vtitle').textContent=v.label;
+  $('vsay').textContent=v.say;
+  const conf=r.submission&&(r.submission.confirmation||r.submission.conf);
+  if(conf){$('vconf').classList.remove('hidden');$('vconf').innerHTML=`${svg('globe')} Submitted via Browserbase · confirmation <code>${conf}</code>`;}
+  else $('vconf').classList.add('hidden');
+  requestAnimationFrame(()=>el.classList.add('show'));
+}
+function renderIssues(r){
+  const box=$('issues');
+  if(!r.flags||!r.flags.length){
+    box.innerHTML=`<div class="issue good"><div class="it">${svg('check')} No issues found</div><div class="ir">All required fields present and no payer-rule conflicts. This referral is clean.</div></div>`;
+    return;
+  }
+  box.innerHTML=r.flags.map(f=>{
+    const cls=f.sev==='risk'?'risk':'warn';
+    return `<div class="issue ${cls}"><div class="it">${svg(f.sev==='risk'?'alert':'list')} ${f.ttl}</div>
+      <div class="ir">${f.rsn}</div><div class="fix"><b>How to fix:</b> ${fixHint(f)}</div></div>`;
+  }).join('');
+}
+function renderSummary(req,r){
+  const miss=new Set((r.missing||[]).map(m=>Array.isArray(m)?m[0]:m));
+  const row=(k,v,path)=>`<div class="kv"><span class="k">${k}</span><span class="v ${(!v||(path&&miss.has(path)))?'miss':''}">${v||'missing'}</span></div>`;
+  $('summary').innerHTML=
+    row("Patient",req.patient?.name,"patient.name")+
+    row("Date of birth",req.patient?.dob,"patient.dob")+
+    row("Diagnosis (ICD-10)",req.diagnosis_code,"diagnosis_code")+
+    row("Procedure (CPT)",req.requested_cpt,"requested_cpt")+
+    row("Procedure",req.procedure)+
+    row("Payer",req.insurance?.payer,"insurance.payer")+
+    row("Member ID",req.insurance?.member_id,"insurance.member_id")+
+    row("Referring NPI",req.npi,"npi");
+}
+function renderTech(r){
+  const box=$('techbox');
+  box.innerHTML=`<div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Session <code style="font-family:var(--mono)">${r.session||'—'}</code> · ${r.steps.length} steps · ${r._offline?'offline simulation':'live backend'}</div>`+
+    r.steps.map(st=>`<div class="trow"><span class="ts">t+${fmtTs(st.ms)}</span><span class="ebadge e-${st.badge}">${(st.badge||'').toUpperCase()}</span><span class="who">${st.who}: ${st.act}</span></div>`).join('');
+}
+
+/* ============ backend detection ============ */
+const ENGINE_LIST=[["claude","Claude"],["redis","Redis"],["sentry","Sentry"],["deepgram","Deepgram"],["phoenix","Phoenix"],["browserbase","Browserbase"],["orkes","Orkes"]];
+function paintEngines(j){
+  $('engines').innerHTML=ENGINE_LIST.map(([k,n])=>`<span class="eng ${j&&j[k]?'on':''}"><span class="d"></span>${n}</span>`).join('');
+}
+paintEngines(null);
+(async()=>{
+  try{
+    const res=await fetch("http://localhost:8000/health",{signal:AbortSignal.timeout(1200)});
+    if(res.ok){const j=await res.json();backendUrl="http://localhost:8000";
+      $('conn').classList.add('live');$('connText').textContent="live backend";paintEngines(j);return;}
+  }catch(e){}
+  $('connText').textContent="offline demo";
+})();
+</script>
+</body>
+</html>

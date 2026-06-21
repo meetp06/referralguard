@@ -49,7 +49,11 @@ async def intake_voice(request: Request):
         body = await request.json()
     except Exception:
         pass
-    tr = voice.transcribe(body.get("audio_path"))
+    # Default to the bundled sample call so the button gives a real Deepgram transcription
+    # (when DEEPGRAM_API_KEY is set) with no path coupling in the frontend.
+    default_audio = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "call.wav"))
+    audio_path = body.get("audio_path") or (default_audio if os.path.exists(default_audio) else None)
+    tr = voice.transcribe(audio_path)
     # Claude turns the free-form transcript into a typed request, then the normal pipeline runs.
     meta = body.get("request_meta") or {
         "id": "REF-VOICE-001", "chan": "deepgram_voice", "clinic": "Northgate Urgent Care",
@@ -60,7 +64,21 @@ async def intake_voice(request: Request):
     meta["raw"] = tr["text"]
     result = ap.run_pipeline(meta)
     result["transcript"] = tr
+    result["request"] = meta
     return result
+
+
+@app.post("/chat")
+async def chat(request: Request):
+    """Grounded case Q&A. Body: {"context": {...case...}, "messages": [{role,content}...]}.
+    Claude answers ONLY from the supplied case context (anti-hallucination)."""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    reply = ap.claude_chat(body.get("context") or {}, body.get("messages") or [])
+    return {"reply": reply, "engine": "claude" if ap.CLAUDE_ON else "mock"}
 
 
 # convenience: serve the dashboard if you want one process for everything

@@ -18,12 +18,17 @@ _tracer = None
 PHOENIX_ON = False
 try:
     if PHOENIX_ENDPOINT:
+        import logging
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        # Export off the request path and in batches, so a span never blocks /process
+        # and an unreachable Phoenix degrades quietly (traces.jsonl is still the audit log).
+        logging.getLogger("opentelemetry.exporter.otlp.proto.http.trace_exporter").setLevel(logging.CRITICAL)
+        logging.getLogger("opentelemetry.sdk.trace.export").setLevel(logging.CRITICAL)
         provider = TracerProvider()
-        provider.add_span_processor(SimpleSpanProcessor(
+        provider.add_span_processor(BatchSpanProcessor(
             OTLPSpanExporter(endpoint=PHOENIX_ENDPOINT.rstrip("/") + "/v1/traces")))
         trace.set_tracer_provider(provider)
         _tracer = trace.get_tracer("referralguard")

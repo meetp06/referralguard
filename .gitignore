@@ -8,6 +8,8 @@ venv/
 .env
 backend/.env
 backend/traces.jsonl
+dump.rdb
+*.rdb
 
 # OS
 .DS_Store
