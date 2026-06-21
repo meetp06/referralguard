@@ -64,6 +64,14 @@ def format_verdict(result: dict) -> str:
 
 
 try:
+    # Python 3.12+ removed the implicit event-loop creation that uagents' Agent()
+    # relies on; ensure one exists for this thread before building the agent.
+    import asyncio
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
     from uagents import Agent, Context, Model, Protocol
     from uagents_core.contrib.protocols.chat import (
         ChatAcknowledgement, ChatMessage, EndSessionContent,

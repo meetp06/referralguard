@@ -17,6 +17,7 @@ load_dotenv()
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
 import agent_pipeline as ap
 import intake_voice as voice
@@ -36,7 +37,9 @@ def health():
 @app.post("/process")
 async def process(request: Request):
     req = await request.json()
-    return ap.run_pipeline(req)
+    # Run off the event loop: the Browserbase submission uses Playwright's sync API,
+    # which cannot run inside the asyncio loop.
+    return await run_in_threadpool(ap.run_pipeline, req)
 
 
 @app.post("/intake/voice")
@@ -63,7 +66,7 @@ async def intake_voice(request: Request):
         "npi": None, "provider": "Dr. Priya Nair, MD", "phone": "(510) 555-0173",
     }
     meta["raw"] = tr["text"]
-    result = ap.run_pipeline(meta)
+    result = await run_in_threadpool(ap.run_pipeline, meta)
     result["transcript"] = tr
     result["request"] = meta
     return result
