@@ -113,19 +113,19 @@ live ratio: *"45–65% context compressed · 283 → 156 tokens · N saved this 
 Every integration makes a **real SDK/API call**, not just a feature flag. Add the key in `.env` to flip
 it live; `GET /health` shows what's on (mock mode otherwise, so judges can run instantly).
 
-**Prize tracks:** 🏆 Best Use of Redis · 🏆 Best Use of Sentry API · 🏆 The Token Company (Ingenuity)
+**Prize tracks:** Best Use of Redis · Best Use of Sentry API · The Token Company (Ingenuity)
 
 | Sponsor | What it does here | Proof in code |
 |---|---|---|
 | **Anthropic — Claude** | extraction, denial-risk reasoning, grounded case chat, compression guard | `agent_pipeline.py` — `anthropic.Anthropic().messages.create()` (L100), `.count_tokens()` (L351) |
-| 🏆 **Redis** | inter-agent session state + audit persistence (TTL 1h) | `agent_pipeline.py:63` — `redis.from_url().ping()/.hset()/.expire()` |
-| 🏆 **Sentry** | exception capture on the member-ID error path, w/ breadcrumbs + tags | `agent_pipeline.py:37-54` — `sentry_sdk.init / add_breadcrumb / capture_exception` |
+| **Redis** | inter-agent session state + audit persistence (TTL 1h) | `agent_pipeline.py:63` — `redis.from_url().ping()/.hset()/.expire()` |
+| **Sentry** | exception capture on the member-ID error path, w/ breadcrumbs + tags | `agent_pipeline.py:37-54` — `sentry_sdk.init / add_breadcrumb / capture_exception` |
 | **Deepgram** | voice intake — transcribe phone referrals (`nova-3`) | `intake_voice.py:41` — `dg.listen.rest.v("1").transcribe_file()` |
 | **Browserbase** | hosted browser submits the PA to the payer portal | `submission_agent.py:31,48` — `api.browserbase.com/v1/sessions` + `playwright.connect_over_cdp()` |
 | **Arize Phoenix** | OTEL tracing of every agent decision span | `observability.py:25-32` — `OTLPSpanExporter → /v1/traces` |
 | **Orkes Conductor** | durable workflow + the HUMAN approval gate | `orchestration/worker.py:28-50` — `conductor.client @worker_task / TaskHandler` |
 | **Fetch.ai / ASI:One** | ASI:One-discoverable agent: NL referral → verdict | `fetch_agent.py` (uagents), `asi_client.py` (ASI:One LLM) |
-| 🏆 **The Token Company** | context compression before every LLM call + real before/after token meter | `agent_pipeline.py:375` — `compress_context()`, `_count_tokens()` (L346) |
+| **The Token Company** | context compression before every LLM call + real before/after token meter | `agent_pipeline.py:375` — `compress_context()`, `_count_tokens()` (L346) |
 
 **Mocked (clearly labeled):** payer policy rules (3 representative), 5 synthetic samples (no PHI),
 EHR/fax connectors (channel field). The pipeline itself is the real part.
