@@ -13,7 +13,12 @@ Run (after the ReferralGuard agent is up and you have its address):
 import os
 from uuid import uuid4
 
-TARGET = os.getenv("REFERRALGUARD_AGENT_ADDRESS", "")
+from dotenv import load_dotenv
+load_dotenv()
+
+# ReferralGuard's address is deterministic (fixed seed), so default to it.
+TARGET = os.getenv("REFERRALGUARD_AGENT_ADDRESS",
+                   "agent1qgq4la65vzumw4ec469vk5zdaqycnxfhuxx669r7p2umzf887cylc2egetv")
 
 SAMPLE_REFERRAL = (
     "Prior auth for Humira (adalimumab), CPT J0135, for rheumatoid arthritis, dx M06.9. "
@@ -22,6 +27,13 @@ SAMPLE_REFERRAL = (
 )
 
 try:
+    # Python 3.12+ removed the implicit event loop uagents relies on.
+    import asyncio
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
     from uagents import Agent, Context, Model
 
     class ReferralRequest(Model):
@@ -36,17 +48,26 @@ try:
     clinic = Agent(name="clinic_intake", seed=os.getenv("CLINIC_AGENT_SEED", "clinic-demo-seed"),
                    port=8002, mailbox=True)
 
-    @clinic.on_event("startup")
+    _sent = {"n": 0}
+
+    @clinic.on_interval(period=20.0)
     async def send_referral(ctx: Context):
-        if not TARGET:
-            ctx.logger.warning("Set REFERRALGUARD_AGENT_ADDRESS to the ReferralGuard agent address.")
-            return
-        ctx.logger.info("Sending referral to ReferralGuard…")
+        if _sent["n"] >= 3:
+            return  # send a few times (covers mailbox connecting), then stop
+        _sent["n"] += 1
+        ctx.logger.info(f"→ Sending referral to ReferralGuard ({TARGET[:18]}…)")
         await ctx.send(TARGET, ReferralRequest(text=SAMPLE_REFERRAL))
 
     @clinic.on_message(model=ReferralVerdict)
     async def on_verdict(ctx: Context, sender: str, msg: ReferralVerdict):
-        ctx.logger.info(f"Verdict: {msg.verdict} | flags={msg.flags} | conf={msg.confirmation}")
+        _sent["n"] = 99  # got a reply, stop sending
+        print("=" * 60)
+        print("AGENT-TO-AGENT REPLY from ReferralGuard:")
+        print(f"  verdict      : {msg.verdict}")
+        print(f"  flags        : {msg.flags}")
+        print(f"  confirmation : {msg.confirmation}")
+        print("=" * 60)
+        ctx.logger.info(f"✅ Verdict received: {msg.verdict} | flags={msg.flags}")
 
     if __name__ == "__main__":
         print(f"Clinic intake agent address: {clinic.address}")
