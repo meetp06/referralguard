@@ -23,6 +23,9 @@ import os
 from datetime import datetime
 from uuid import uuid4
 
+from dotenv import load_dotenv
+load_dotenv()   # pick up ANTHROPIC / ASI_ONE / BROWSERBASE keys so the agent runs live
+
 from agent_pipeline import run_pipeline
 from asi_client import extract_referral, ASI_ON
 
