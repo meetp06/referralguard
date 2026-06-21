@@ -8,6 +8,8 @@
 UC Berkeley AI Hackathon 2026.
 
 > **Try it:** open [`dashboard/index.html`](dashboard/index.html) in any browser — runs standalone, flips to **live** when the backend is up.
+>
+> **Fetch.ai / ASI:One:** ReferralGuard is also a live **ASI:One-discoverable uAgent** — describe a referral in plain English in ASI:One chat and get the verdict back, no UI. Agent: `referralguard` · address `agent1qgq4la65vzumw4ec469vk5zdaqycnxfhuxx669r7p2umzf887cylc2egetv`. See [Fetch.ai / ASI:One](#fetchai--asione--a-discoverable-referral-agent).
 
 ---
 
@@ -105,6 +107,31 @@ all flags + every audit step + history). Before each LLM call, `compress_context
 Token counts use the **model's real tokenizer** (`messages.count_tokens`). The chat panel shows the
 live ratio: *"45–65% context compressed · 283 → 156 tokens · N saved this session."*
 → `compress_context()` in `backend/agent_pipeline.py`.
+
+---
+
+## Fetch.ai / ASI:One — a discoverable referral agent
+
+Beyond the dashboard, ReferralGuard runs as a **uAgent on the ASI:One Chat Protocol** — so a
+clinician (or another agent) can reach it in plain English, with no frontend at all.
+
+- **NL in, verdict out.** Send "Prior auth for Humira, RA patient, no methotrexate trial, Aetna…"
+  → **ASI:One** (`asi_client.py`) extracts the structured fields → the same pipeline runs → it
+  replies with the verdict, the per-flag reasons, and (if READY) the Browserbase confirmation.
+- **ASI:One-discoverable.** Registered on Agentverse as a **Mailbox** agent so it's reachable
+  through ASI:One.
+  Address: `agent1qgq4la65vzumw4ec469vk5zdaqycnxfhuxx669r7p2umzf887cylc2egetv`.
+- **Agent-to-agent.** `clinic_agent.py` is a second uAgent that messages ReferralGuard over a
+  typed `ReferralRequest → ReferralVerdict` contract — a working multi-agent handoff, not just one bot.
+
+```bash
+cd backend
+python fetch_agent.py     # prints the agent address + Agentverse inspector link
+# then add it on https://agentverse.ai (Mailbox) to make it ASI:One-discoverable
+```
+
+Files: `backend/fetch_agent.py` (Chat Protocol + a2a), `backend/clinic_agent.py` (peer agent),
+`backend/asi_client.py` (ASI:One LLM extraction). Details in [`docs/FETCH_AI.md`](docs/FETCH_AI.md).
 
 ---
 
